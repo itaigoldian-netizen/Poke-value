@@ -1,0 +1,14 @@
+{
+  "functions": {
+    "api/price.js": {
+      "runtime": "@vercel/node",
+      "maxDuration": 60
+    }
+  },
+  "routes": [
+    {
+      "src": "/api/price",
+      "dest": "api/price.js"
+    }
+  ]
+}
