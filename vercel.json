@@ -3,5 +3,11 @@
     "api/price.js": {
       "maxDuration": 60
     }
-  }
+  },
+  "routes": [
+    {
+      "src": "/api/price",
+      "dest": "api/price.js"
+    }
+  ]
 }
