@@ -1,0 +1,8 @@
+{
+  "name": "poke-value",
+  "version": "1.0.0",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.39.0",
+    "cheerio": "^1.0.0-rc.12"
+  }
+}
