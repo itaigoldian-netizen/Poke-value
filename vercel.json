@@ -1,0 +1,7 @@
+{
+  "functions": {
+    "api/price.js": {
+      "maxDuration": 60
+    }
+  }
+}
