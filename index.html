@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Poke Value - מחירון קלפים מדורגים</title>
+    <script src="https://jsdelivr.net"></script>
+    <script src="https://tailwindcss.com"></script>
+</head>
+<body class="bg-slate-50 text-slate-800">
+    <header class="bg-white border-b border-slate-200 py-6 px-4 mb-8 shadow-sm">
+        <div class="max-w-6xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
+            <h1 class="text-3xl font-extrabold text-slate-900">Poke <span class="text-blue-600">Value</span></h1>
+            <div class="flex flex-1 max-w-xl w-full gap-2">
+                <input id="cardSearch" type="text" placeholder="חפש קלף (למשל: Charizard Base Set)..." class="w-full px-4 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <button id="searchBtn" class="bg-blue-600 text-white px-6 py-2 rounded-lg font-medium hover:bg-blue-700 transition">חיפוש</button>
+            </div>
+        </div>
+    </header>
+    <main class="max-w-6xl mx-auto px-4 pb-12">
+        <div class="flex justify-center gap-2 mb-8">
+            <button data-lang="English" class="lang-btn bg-blue-600 text-white px-4 py-2 rounded-md font-medium">English</button>
+            <button data-lang="Japanese" class="lang-btn bg-white text-slate-700 border border-slate-300 px-4 py-2 rounded-md font-medium">Japanese</button>
+            <button data-lang="Chinese" class="lang-btn bg-white text-slate-700 border border-slate-300 px-4 py-2 rounded-md font-medium">Chinese</button>
+            <button data-lang="Korean" class="lang-btn bg-white text-slate-700 border border-slate-300 px-4 py-2 rounded-md font-medium">Korean</button>
+        </div>
+        <div id="results" class="hidden bg-white border border-slate-200 rounded-xl shadow-sm p-6">
+            <h2 id="resultTitle" class="text-2xl font-bold text-slate-800 mb-6 text-center"></h2>
+            <div class="overflow-x-auto">
+                <table class="w-full text-right border-collapse">
+                    <thead>
+                        <tr class="border-b border-slate-200 bg-slate-50 text-slate-600 font-semibold">
+                            <th class="p-4">ציון דירוג (EAS)</th>
+                            <th class="p-4">מחיר משוקלל (Poke Value)</th>
+                            <th class="p-4 text-center">סה"כ מכירות</th>
+                        </tr>
+                    </thead>
+                    <tbody id="priceTableBody" class="text-slate-700 divide-y divide-slate-100"></tbody>
+                </table>
+            </div>
+        </div>
+    </main>
+    <script>
+        let currentLanguage = 'English';
+        const searchInput = document.getElementById('cardSearch');
+        const searchBtn = document.getElementById('searchBtn');
+        const resultsDiv = document.getElementById('results');
+        const resultTitle = document.getElementById('resultTitle');
+        const tableBody = document.getElementById('priceTableBody');
+
+        document.querySelectorAll('.lang-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                document.querySelectorAll('.lang-btn').forEach(b => {
+                    b.classList.remove('bg-blue-600', 'text-white');
+                    b.classList.add('bg-white', 'text-slate-700', 'border', 'border-slate-300');
+                });
+                e.target.classList.add('bg-blue-600', 'text-white');
+                e.target.classList.remove('bg-white', 'text-slate-700', 'border');
+                currentLanguage = e.target.getAttribute('data-lang');
+                if(searchInput.value.trim()) performSearch();
+            });
+        });
+
+        searchBtn.addEventListener('click', performSearch);
+        searchInput.addEventListener('keypress', (e) => { if(e.key === 'Enter') performSearch(); });
+
+        async function performSearch() {
+            const cardQuery = searchInput.value.trim();
+            if(!cardQuery) return;
+            tableBody.innerHTML = '';
+            resultTitle.textContent = `${cardQuery} (${currentLanguage})`;
+            
+            for (let grade = 10; grade >= 1; grade--) {
+                const row = document.createElement('tr');
+                row.className = 'hover:bg-slate-50 transition';
+                row.innerHTML = `<td class="p-4 font-bold text-slate-900">EAS ${grade}</td><td id="price-${grade}" class="p-4 text-slate-500">טוען...</td><td id="sales-${grade}" class="p-4 text-center text-slate-500">-</td>`;
+                tableBody.appendChild(row);
+            }
+            resultsDiv.classList.remove('hidden');
+
+            for (let grade = 10; grade >= 1; grade--) {
+                fetchGradePrice(cardQuery, currentLanguage, grade);
+            }
+        }
+
+        async function fetchGradePrice(card, language, grade) {
+            try {
+                const response = await fetch(`/api/price?card=${encodeURIComponent(card)}&language=${language}&grade=${grade}`);
+                const data = await response.json();
+                const priceTd = document.getElementById(`price-${grade}`);
+                const salesTd = document.getElementById(`sales-${grade}`);
+                if (response.ok && data.poke_value) {
+                    priceTd.innerHTML = `<span class="text-emerald-600 font-extrabold text-lg">$${data.poke_value}</span>`;
+                    salesTd.textContent = data.total_sales || 0;
+                } else {
+                    priceTd.textContent = 'אין מידע';
+                    salesTd.textContent = 0;
+                }
+            } catch {
+                document.getElementById(`price-${grade}`).textContent = 'שגיאה';
+            }
+        }
+    </script>
+</body>
+</html>
