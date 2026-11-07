@@ -125,10 +125,13 @@ async function fetchCompsApiSales(cardQuery, grader, grade, language) {
   }
   const isRaw = grader === 'RAW';
 
-  // One request per cell (the click model): /v1/sold returns the newest page
-  // of sales with a parsed card object per item. Grader+grade are passed as
-  // card options, not spelled into q, per the docs' guidance.
-  const params = new URLSearchParams({ q: cardQuery, size: '200', exclude: 'junk' });
+  // One request per cell (the click model). /v1/comps is the right endpoint:
+  // it scans the newest 200 sales over 90 days and returns the 10 newest that
+  // match the card options, while /v1/sold filters only the single page it
+  // fetched and can miss graded sales entirely (verified live Nov7: a PSA 9
+  // cell that /v1/sold page 1 filtered to 0 came back with real sales here).
+  // Grader+grade are passed as card options, not spelled into q, per the docs.
+  const params = new URLSearchParams({ q: cardQuery, exclude: 'junk' });
   if (isRaw) {
     params.set('graded', 'false');
   } else {
@@ -140,7 +143,7 @@ async function fetchCompsApiSales(cardQuery, grader, grade, language) {
   // no lang and drop the few foreign-tagged rows locally instead.
   if (language !== 'English') params.set('lang', COMPS_LANG[language]);
 
-  const endpoint = 'https://api.compsapi.com/v1/sold?' + params.toString();
+  const endpoint = 'https://api.compsapi.com/v1/comps?' + params.toString();
   const response = await fetch(endpoint, { headers: { 'X-API-Key': key } });
   if (response.status === 429) {
     // Monthly quota reached: the key pauses until the UTC month resets. No
