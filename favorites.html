@@ -29,6 +29,14 @@ button.btn.link{background:#fff;border:1px solid #2563eb;color:#2563eb;text-deco
 button.btn.link:hover{background:#eff6ff}
 .hidden{display:none}
 .fav-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:14px;margin-top:12px}
+.user-id{font-size:.85rem;color:#64748b;direction:ltr;text-align:right;margin-top:14px;word-break:break-all}
+.admin-row{display:flex;align-items:center;justify-content:space-between;gap:10px;border:1px solid #e2e8f0;border-radius:10px;padding:10px 14px;margin-bottom:8px;background:#fff;flex-wrap:wrap}
+.admin-row .who{font-size:.9rem;color:#1e293b;word-break:break-all}
+.admin-row .who span{color:#64748b;font-size:.8rem;direction:ltr;display:block}
+.admin-row button{background:#fff;border:1px solid #2563eb;color:#2563eb;border-radius:10px;padding:8px 18px;font-weight:600;font-size:.95rem;cursor:pointer;transition:background .15s;white-space:nowrap}
+.admin-row button:hover{background:#eff6ff}
+.admin-add{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}
+.admin-add input{flex:1;min-width:200px;padding:10px 14px;border:1px solid #cbd5e1;border-radius:10px;font-size:1rem}
 .fav-card{border:1px solid #e2e8f0;border-radius:10px;padding:10px;text-align:center;background:#fff}
 .fav-card img{width:100%;border-radius:6px}
 .fav-card .nm{font-weight:600;font-size:.95rem;margin-top:6px;color:#1e293b}
@@ -60,6 +68,18 @@ button.btn.link:hover{background:#eff6ff}
                 <button id="favAuthBtn" class="btn">התחברות עם Google</button>
             </div>
             <div id="favGrid" class="fav-grid hidden"></div>
+            <p id="userIdLine" class="hidden user-id"></p>
+        </section>
+        <section id="adminSection" class="hidden">
+            <h2>ניהול מנהלים</h2>
+            <p class="empty-state">מוצג רק לבעל האתר. מנהל ממונה יכול לנהל את תוכן האתר, אך רק אתה יכול להוסיף או להסיר מנהלים.</p>
+            <div id="adminList"></div>
+            <div class="admin-add">
+                <input id="adminIdInput" type="text" placeholder="מזהה המשתמש (UUID) של המנהל החדש" dir="ltr">
+                <input id="adminNoteInput" type="text" placeholder="שם או הערה (לא חובה)">
+                <button id="adminAddBtn" class="btn">הוספת מנהל</button>
+            </div>
+            <p id="adminMsg" class="empty-state"></p>
         </section>
     </main>
     <footer>
@@ -148,10 +168,78 @@ button.btn.link:hover{background:#eff6ff}
             if (!PokeAuth.isSubscriber()){
                 showAuth('המועדפים זמינים למנויים.');
                 authBtn.classList.add('hidden');
-                return;
+            } else {
+                loadFavorites();
             }
-            loadFavorites();
+            // מזהה המשתמש - לשיתוף עם הבעלים לצורך מינוי מנהל
+            var idLine = document.getElementById('userIdLine');
+            idLine.textContent = 'מזהה המשתמש שלך: ' + PokeAuth.user().id;
+            idLine.classList.remove('hidden');
+            if (PokeAuth.isOwner()) initAdminSection();
         });
+
+        function initAdminSection(){
+            var section = document.getElementById('adminSection');
+            var list = document.getElementById('adminList');
+            var msg = document.getElementById('adminMsg');
+            var idInput = document.getElementById('adminIdInput');
+            var noteInput = document.getElementById('adminNoteInput');
+            var addBtn = document.getElementById('adminAddBtn');
+            section.classList.remove('hidden');
+            var sb = PokeAuth.client();
+
+            function loadAdmins(){
+                sb.from('app_admins').select('user_id,note,created_at').order('created_at', {ascending: true})
+                    .then(function(res){
+                        var rows = (res && res.data) || [];
+                        list.innerHTML = '';
+                        if (!rows.length){
+                            list.innerHTML = '<p class="empty-state">עוד לא מונו מנהלים.</p>';
+                            return;
+                        }
+                        rows.forEach(function(a){
+                            var row = document.createElement('div');
+                            row.className = 'admin-row';
+                            var who = document.createElement('div');
+                            who.className = 'who';
+                            who.textContent = a.note || 'מנהל';
+                            var sub = document.createElement('span');
+                            sub.textContent = a.user_id;
+                            who.appendChild(sub);
+                            var rm = document.createElement('button');
+                            rm.textContent = 'הסרת מנהל';
+                            rm.addEventListener('click', function(){
+                                if (!confirm('להסיר את גישת המנהל?')) return;
+                                rm.disabled = true;
+                                sb.from('app_admins').delete().eq('user_id', a.user_id)
+                                    .then(function(){ loadAdmins(); });
+                            });
+                            row.appendChild(who);
+                            row.appendChild(rm);
+                            list.appendChild(row);
+                        });
+                    });
+            }
+
+            addBtn.addEventListener('click', function(){
+                var uid = idInput.value.trim();
+                if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(uid)){
+                    msg.textContent = 'יש להזין מזהה משתמש (UUID) תקין - המתנהל שולח אותו לך מעמוד המועדפים שלו.';
+                    return;
+                }
+                addBtn.disabled = true;
+                sb.from('app_admins').insert({ user_id: uid, note: noteInput.value.trim() || null })
+                    .then(function(res){
+                        addBtn.disabled = false;
+                        if (res && res.error){ msg.textContent = 'שגיאה בהוספה: ' + res.error.message; return; }
+                        idInput.value = ''; noteInput.value = '';
+                        msg.textContent = 'המנהל נוסף.';
+                        loadAdmins();
+                    });
+            });
+
+            loadAdmins();
+        }
     })();
     </script>
 </body>

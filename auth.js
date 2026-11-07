@@ -53,6 +53,7 @@ window.PokeAuth = (function(){
   function user(){ return currentUser; }
   function isSubscriber(){ return subscriber === true; }
   function isSignedIn(){ return !!currentUser; }
+  function isOwner(){ return !!currentUser && currentUser.id === OWNER_ID; }
 
   // כפתור התחברות/התנתקות קטן ב-header. נקרא מהדפים אחרי ready().
   function mountHeaderButton(container){
@@ -70,7 +71,7 @@ window.PokeAuth = (function(){
   }
 
   return { ready: ready, signIn: signIn, signOut: signOut, user: user,
-           isSignedIn: isSignedIn, isSubscriber: isSubscriber,
+           isSignedIn: isSignedIn, isSubscriber: isSubscriber, isOwner: isOwner,
            mountHeaderButton: mountHeaderButton, enabled: enabled,
            client: function(){ return client; } };
 })();
