@@ -42,9 +42,13 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'Invalid language' });
   }
 
-  // Paused unless explicitly enabled: set SALES_PROVIDER_ENABLED=true in the
-  // Vercel environment only after credit cost and provider support are confirmed.
-  if (process.env.SALES_PROVIDER_ENABLED !== 'true') {
+  // Paused unless explicitly enabled. This legacy aggregate endpoint (4
+  // provider requests per call, one per foreign grader) has its own second
+  // gate, LEGACY_PRICE_ENABLED: the owner approved activating the click model
+  // (api/company-price.js, 1 request per cell) on the CompsAPI free quota
+  // (Nov7 19:11), not this 4x-cost aggregate, so it stays paused unless both
+  // flags are set in the Vercel environment.
+  if (process.env.SALES_PROVIDER_ENABLED !== 'true' || process.env.LEGACY_PRICE_ENABLED !== 'true') {
     return res.status(503).json({ error: 'Price lookup is paused' });
   }
 
