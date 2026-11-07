@@ -17,6 +17,26 @@ import webpush from 'web-push';
 // stored subscription. Dead subscriptions (404/410 from the push service)
 // are deleted so sends stay bounded.
 
+// Duplicate protection: Supabase retries a webhook when the function errors
+// or times out, which could otherwise push the same article (or report) to
+// subscribers twice. The first delivery inserts the record key into
+// push_notify_log; a retry hits the unique constraint and is skipped. A
+// crash between insert and send can drop one notification - chosen over
+// spamming subscribers twice on retry.
+async function markDelivered(supabase, table, record) {
+  const key = table === 'articles'
+    ? (record.id ? 'id:' + record.id
+       : (record.title ? 'title:' + record.title + '|' + (record.published_at || '') : null))
+    : (record.id ? 'id:' + record.id : null);
+  if (!key) return { duplicate: false }; // no stable key -> no dedupe possible
+  const { error } = await supabase
+    .from('push_notify_log')
+    .insert({ table_name: table, record_id: String(key) });
+  if (error && error.code === '23505') return { duplicate: true };
+  if (error) return { error };
+  return { duplicate: false };
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
@@ -68,6 +88,16 @@ export default async function handler(req, res) {
     );
 
     const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+
+    const mark = await markDelivered(supabase, table, record);
+    if (mark.duplicate) {
+      return res.status(200).json({ skipped: true, duplicate: true });
+    }
+    if (mark.error) {
+      console.error('push notify failed: ' + (mark.error.message || 'unknown'));
+      return res.status(500).json({ error: 'Server error' });
+    }
+
     const { data: subs, error } = await supabase.from(targetTable).select('endpoint, keys');
     if (error) {
       console.error('push notify failed: ' + (error.message || 'unknown'));

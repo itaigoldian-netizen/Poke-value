@@ -21,6 +21,12 @@ import { createClient } from '@supabase/supabase-js';
 //        the subscription itself is the consent; rows land in the separate
 //        article_subscribers table, never in the owner's alert list. The two
 //        audiences stay fully distinct.
+//   DELETE /api/push-subscribe { endpoint, audience: 'articles' } -> public
+//        unsubscribe: deletes the visitor row from article_subscribers. No
+//        login - the endpoint URL is the capability (only the subscribed
+//        browser holds it), and deleting it can never expose anything, only
+//        stop notifications. A body without audience still requires the
+//        owner session token (owner table).
 
 const MAX_ENDPOINT_LEN = 2000;
 const MAX_SUBSCRIPTIONS = 10; // the owner has a phone and maybe a desktop
@@ -62,7 +68,7 @@ async function ownerFromToken(req) {
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   if (req.method === 'OPTIONS') return res.status(200).end();
 
@@ -74,7 +80,7 @@ export default async function handler(req, res) {
   if (req.method === 'GET') {
     return res.status(200).json({ publicKey });
   }
-  if (req.method !== 'POST') {
+  if (req.method !== 'POST' && req.method !== 'DELETE') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
@@ -92,6 +98,22 @@ export default async function handler(req, res) {
       if (!owner) {
         return res.status(403).json({ error: 'Only the site owner can enable notifications' });
       }
+    }
+
+    // Unsubscribe (visitor articles audience, or owner with a valid session):
+    // delete the row by its endpoint. The endpoint is the capability.
+    if (req.method === 'DELETE') {
+      const endpoint = req.body && typeof req.body.endpoint === 'string' ? req.body.endpoint : '';
+      if (!endpoint || endpoint.length > MAX_ENDPOINT_LEN) {
+        return res.status(400).json({ error: 'Invalid endpoint' });
+      }
+      const table = isArticleAudience ? 'article_subscribers' : 'push_subscriptions';
+      const { error } = await supabase.from(table).delete().eq('endpoint', endpoint);
+      if (error) {
+        console.error('push unsubscribe failed: ' + (error.message || 'unknown'));
+        return res.status(500).json({ error: 'Server error' });
+      }
+      return res.status(200).json({ ok: true });
     }
 
     const sub = req.body && req.body.subscription;

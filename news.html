@@ -36,6 +36,11 @@ footer .credit{color:#64748b;font-size:0.85rem;max-width:40rem;margin:8px auto 0
 .news-note{color:#64748b;font-size:0.85rem;margin-top:12px}
 .news-error{color:#713f12}
 .hidden{display:none}
+button.btn{background:#2563eb;color:#fff;border:none;padding:10px 22px;border-radius:10px;font-weight:600;font-size:1rem;cursor:pointer;transition:background .15s}
+button.btn:hover{background:#1d4ed8}
+button.btn:disabled{opacity:.6;cursor:default}
+button.btn.link{background:#fff;border:1px solid #2563eb;color:#2563eb;text-decoration:none}
+button.btn.link:hover{background:#eff6ff}
     </style>
 </head>
 <body>
@@ -64,6 +69,7 @@ footer .credit{color:#64748b;font-size:0.85rem;max-width:40rem;margin:8px auto 0
             <div id="article-push-box" class="hidden" style="margin-bottom:1rem; padding:0.75rem; border:1px solid var(--border,#ddd); border-radius:8px;">
                 <p id="article-push-msg" style="margin:0 0 0.5rem;">רוצים לדעת ראשונים כשעולה כתבה חדשה?</p>
                 <button id="article-push-btn" class="btn">הפעלת התראות על כתבות חדשות</button>
+                <button id="article-push-off-btn" class="btn link hidden">ביטול התראות על כתבות</button>
             </div>
             <div id="own-articles"></div>
             <p id="empty-state" class="empty-state">עדיין לא פורסמו כתבות. כשתצא הכתבה הראשונה שלנו, היא תופיע כאן.</p>
@@ -167,15 +173,43 @@ footer .credit{color:#64748b;font-size:0.85rem;max-width:40rem;margin:8px auto 0
             if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)){
                 return; // דפדפן ללא תמיכה - הקופסה נשארת מוסתרת
             }
+            var offBtn = document.getElementById('article-push-off-btn');
             navigator.serviceWorker.register('/sw.js').then(function(reg){
                 box.classList.remove('hidden');
                 return reg.pushManager.getSubscription().then(function(sub){
                     if (sub && Notification.permission === 'granted'){
                         btn.classList.add('hidden');
+                        offBtn.classList.remove('hidden');
                         articlePushMsg('ההתראות על כתבות חדשות פעילות במכשיר זה.');
                     }
                 });
             }).catch(function(){ /* נשאר מוסתר */ });
+
+            offBtn.addEventListener('click', function(){
+                offBtn.disabled = true;
+                articlePushMsg('מבטל...');
+                navigator.serviceWorker.ready.then(function(reg){
+                    return reg.pushManager.getSubscription().then(function(sub){
+                        if (!sub) return null;
+                        return fetch('/api/push-subscribe', {
+                            method: 'DELETE',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ endpoint: sub.endpoint, audience: 'articles' })
+                        }).then(function(r){
+                            if (!r.ok) throw new Error('unsubscribe failed');
+                            return sub.unsubscribe();
+                        });
+                    });
+                }).then(function(){
+                    offBtn.disabled = false;
+                    offBtn.classList.add('hidden');
+                    btn.classList.remove('hidden');
+                    articlePushMsg('רוצים לדעת ראשונים כשעולה כתבה חדשה?');
+                }).catch(function(){
+                    offBtn.disabled = false;
+                    articlePushMsg('הביטול נכשל. נסו שוב.');
+                });
+            });
 
             btn.addEventListener('click', function(){
                 btn.disabled = true;
@@ -202,6 +236,7 @@ footer .credit{color:#64748b;font-size:0.85rem;max-width:40rem;margin:8px auto 0
                 }).then(function(r){
                     if (!r.ok) throw new Error('save failed');
                     btn.classList.add('hidden');
+                    offBtn.classList.remove('hidden');
                     articlePushMsg('נרשמת! כשתעלה כתבה חדשה תקבלו התראה.');
                 }).catch(function(e){
                     btn.disabled = false;
