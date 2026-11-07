@@ -458,8 +458,13 @@ body{font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif}
         //                  is_estimate: boolean (true for our EAS estimate cells) }],
         //        sales: [{ date: "YYYY-MM-DD", title, price, currency, grade_label, source }] }
         // Cell set is fully data-driven: no grader list is hardcoded here.
-        // One request per card replaces the old per-grade fanout (was 10 grades
-        // x 5 grader calls = 50 provider requests per uncached card).
+        // The frontend makes one request per card instead of the old per-grade
+        // fanout (10 requests). Upstream provider cost depends on the future
+        // backend implementation and is NOT established by this change.
+        // Backend constraints when implemented: estimated cells (EAS) must keep
+        // their own currency/source distinct from real-sale cells, and
+        // unlike currencies must never be mixed in one aggregate. No valuation
+        // formula is wired in; v3 awaits owner approval.
         async function runPriceLookup(card) {
             if (!SEARCH_ENABLED) return; // development build: price lookup paused
             const cardQuery = card.priceQuery || searchInput.value.trim(); // exact picked identity, never just the typed text
