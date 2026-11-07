@@ -64,7 +64,8 @@ export default async function handler(req, res) {
   }
   const variantKey = variantInfo.resolved;
 
-  const queryKey = card.trim().toLowerCase().replace(/\s+/g, ' ');
+  // Same derivation as the click endpoint: the client query is never trusted.
+  const queryKey = variantInfo.derivedQuery.toLowerCase().replace(/\s+/g, ' ');
   const keyPrefix = CACHE_KEY_PREFIX + providerCacheTag() + ':' + queryKey + '|';
 
   try {

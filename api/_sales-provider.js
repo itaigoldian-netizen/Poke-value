@@ -98,7 +98,7 @@ export function variantOptionsFromDetail(detailed) {
     const key = edition ? edition + '+' + finish : finish;
     if (!options.includes(key)) options.push(key);
   }
-  return { options, unsupported: [...new Set(unsupported)], strict: detailed.length > 1 };
+  return { options, unsupported: [...new Set(unsupported)] };
 }
 
 // Search terms appended to the provider query for EVERY variant token: the
@@ -117,34 +117,28 @@ function variantQueryTerms(variantKey) {
   return terms;
 }
 
-// Positive-evidence title match. In strict mode every token must be stated;
-// in exhaustion mode only a positive contradiction disqualifies. shadowless
-// titles never match anything.
-export function titleMatchesVariant(title, variantKey, strict) {
-  if (!variantKey) return true;
+// Positive-evidence title match, ALWAYS strict (Main review Nov7 22:33):
+// catalog incompleteness means even a single detailed row is not proof no
+// other variant exists, so EVERY valued variant requires its tokens to be
+// explicitly stated in the sale title; unmarked titles match nothing.
+// Contradictory phrases reject both directions: 'reverse holo'/'non-holo'
+// contain 'holo' but never count as holo, and a title stating both
+// '1st edition' and 'unlimited' matches neither edition.
+export function titleMatchesVariant(title, variantKey) {
+  if (!variantKey) return true; // legacy aggregate path carries no variant
   if (RE_SHADOWLESS.test(title)) return false;
   const tokens = variantKey.split('+');
   const hasEd = tokens.includes('first-edition');
   const hasUnl = tokens.includes('unlimited');
   const finish = tokens.find(t => t !== 'first-edition' && t !== 'unlimited') || null;
-  if (strict) {
-    if (hasEd && !RE_1ST_ED.test(title)) return false;
-    if (hasUnl && !RE_UNLIMITED.test(title)) return false;
-    if (hasUnl && RE_1ST_ED.test(title)) return false;
-    if (finish === 'holo' && !(RE_HOLO.test(title) && !RE_REVERSE.test(title) && !RE_NONHOLO.test(title))) return false;
-    if (finish === 'non-holo' && !RE_NONHOLO.test(title)) return false;
-    if (finish === 'reverse' && !(RE_REVERSE.test(title) && RE_HOLO.test(title))) return false;
-    if (finish === 'w-promo' && !RE_WPROMO.test(title)) return false;
-    if (!hasEd && RE_1ST_ED.test(title)) return false; // never fold 1st ed into another variant
-    return true;
-  }
-  // exhaustion: only a positive contradiction disqualifies
+  if (hasEd && !(RE_1ST_ED.test(title) && !RE_UNLIMITED.test(title))) return false;
   if (!hasEd && RE_1ST_ED.test(title)) return false;
-  if (hasEd && !RE_1ST_ED.test(title)) return false; // a 1st-ed-only card still needs the mark
-  if (finish === 'holo' && (RE_REVERSE.test(title) || RE_NONHOLO.test(title))) return false;
-  if (finish === 'non-holo' && (RE_REVERSE.test(title) || (RE_HOLO.test(title) && !RE_NONHOLO.test(title)))) return false;
-  if (finish === 'reverse' && (RE_NONHOLO.test(title) || (RE_HOLO.test(title) && !RE_REVERSE.test(title)))) return false;
-  if (finish === 'w-promo' && (RE_REVERSE.test(title) || RE_NONHOLO.test(title) || RE_HOLO.test(title))) return false;
+  if (hasUnl && !(RE_UNLIMITED.test(title) && !RE_1ST_ED.test(title))) return false;
+  if (!hasUnl && RE_UNLIMITED.test(title)) return false;
+  if (finish === 'holo' && !(RE_HOLO.test(title) && !RE_REVERSE.test(title) && !RE_NONHOLO.test(title))) return false;
+  if (finish === 'non-holo' && !(RE_NONHOLO.test(title) && !RE_REVERSE.test(title))) return false;
+  if (finish === 'reverse' && !(RE_REVERSE.test(title) && RE_HOLO.test(title) && !RE_NONHOLO.test(title))) return false;
+  if (finish === 'w-promo' && !(RE_WPROMO.test(title) && !RE_REVERSE.test(title) && !RE_NONHOLO.test(title))) return false;
   return true;
 }
 
@@ -194,7 +188,15 @@ export async function resolveCardVariant(tcgId, language, variantRaw) {
   } else {
     return { error: { status: 409, body: { error: 'variant_required', options: model.options, unsupported: model.unsupported } } };
   }
-  return { resolved, options: model.options, unsupported: model.unsupported, strict: model.strict };
+  // The card query is DERIVED from the same TCGdex record (Main review Nov7
+  // 22:33): the client's free-text card param is never trusted for matching
+  // or caching, so a mismatched query with a valid tcg id cannot poison keys.
+  const setId = (detail.set && detail.set.id) || String(detail.id || '').split('-').slice(0, -1).join('-');
+  if (!detail.name || !detail.localId || !setId) {
+    return { error: { status: 503, body: { error: 'Variant verification unavailable' } } };
+  }
+  const derivedQuery = [String(detail.name), setId, String(detail.localId)].join(' ');
+  return { resolved, options: model.options, unsupported: model.unsupported, derivedQuery, cardName: String(detail.name) };
 }
 
 export function activeProvider() {
@@ -213,16 +215,16 @@ export function providerCacheTag() {
   return activeProvider() === 'compsapi' ? 'compsapi' : 'scraperapi';
 }
 
-export async function fetchSales(cardQuery, grader, grade, language, variantKey, variantStrict) {
+export async function fetchSales(cardQuery, grader, grade, language, variantKey) {
   if (activeProvider() === 'compsapi') {
-    return fetchCompsApiSales(cardQuery, grader, grade, language, variantKey, variantStrict);
+    return fetchCompsApiSales(cardQuery, grader, grade, language, variantKey);
   }
-  return fetchScraperApiSales(cardQuery, grader, grade, language, variantKey, variantStrict);
+  return fetchScraperApiSales(cardQuery, grader, grade, language, variantKey);
 }
 
 // --- ScraperAPI structured eBay search (original integration) ---
 
-async function fetchScraperApiSales(cardQuery, grader, grade, language, variantKey, variantStrict) {
+async function fetchScraperApiSales(cardQuery, grader, grade, language, variantKey) {
   // eBay's sold view covers roughly the last 90 days; it has no day-range parameter.
   const isRaw = grader === 'RAW';
   let searchString = isRaw ? cardQuery : `${cardQuery} ${grader} ${grade}`;
@@ -273,7 +275,7 @@ async function fetchScraperApiSales(cardQuery, grader, grade, language, variantK
       if (!exactGradeRegex.test(title)) continue;
     }
 
-    if (!titleMatchesVariant(title, variantKey, variantStrict)) continue;
+    if (!titleMatchesVariant(title, variantKey)) continue;
 
     if (p.value > 0) {
       listings.push({ price: p.value, date: null, title });
@@ -291,7 +293,7 @@ const COMPS_LANG = { English: 'en', Japanese: 'ja', Chinese: 'zh', Korean: 'ko' 
 // and we drop them again locally so a flag definition change never leaks one in.
 const COMPS_JUNK_FLAGS = new Set(['lot', 'mystery', 'sealed', 'accessory', 'replica', 'keyword_stuffing', 'not_graded_claim', 'title_missing']);
 
-async function fetchCompsApiSales(cardQuery, grader, grade, language, variantKey, variantStrict) {
+async function fetchCompsApiSales(cardQuery, grader, grade, language, variantKey) {
   const key = process.env.COMPS_API_KEY;
   if (!key) {
     throw new Error('data provider is not configured');
@@ -359,7 +361,7 @@ async function fetchCompsApiSales(cardQuery, grader, grade, language, variantKey
       if (String(c.grade || '') !== String(grade)) continue;
     }
 
-    if (!titleMatchesVariant(String(item.title || ''), variantKey, variantStrict)) continue;
+    if (!titleMatchesVariant(String(item.title || ''), variantKey)) continue;
 
     listings.push({ price: item.price, date: item.last_sold || null, title: String(item.title || '') });
   }

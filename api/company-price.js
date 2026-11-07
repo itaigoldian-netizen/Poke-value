@@ -101,7 +101,8 @@ export default async function handler(req, res) {
   }
   const variantKey = variantInfo.resolved;
 
-  const queryKey = card.trim().toLowerCase().replace(/\s+/g, ' ');
+  // The matching/caching query comes from the TCGdex record, not the client.
+  const queryKey = variantInfo.derivedQuery.toLowerCase().replace(/\s+/g, ' ');
   const cacheKey = cacheKeyFor(queryKey, graderKey, variantKey);
 
   try {
@@ -141,7 +142,7 @@ export default async function handler(req, res) {
 
     let sales;
     try {
-      sales = await fetchSales(queryKey, graderKey, gradeValue, language, variantKey, variantInfo.strict);
+      sales = await fetchSales(queryKey, graderKey, gradeValue, language, variantKey);
     } catch (err) {
       // Message only: never log request URLs, they contain the API key.
       console.error('sales fetch failed for ' + graderKey + ' ' + gradeValue + ': ' + errMsg(err));
@@ -159,7 +160,7 @@ export default async function handler(req, res) {
     const finalPrice = Math.round(median * 100) / 100;
 
     const payload = {
-      card_name: card.trim(),
+      card_name: variantInfo.cardName,
       language,
       variant: variantKey,
       grader: graderKey,
@@ -173,7 +174,7 @@ export default async function handler(req, res) {
 
     const cacheRow = {
       card_key: cacheKey,
-      card_query: card.trim(),
+      card_query: variantInfo.derivedQuery,
       language,
       grade: gradeValue,
       price: finalPrice,
