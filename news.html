@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>חדשות - Poke Value</title>
     <link rel="icon" type="image/jpeg" href="/favicon.png.jpeg">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif;background:#f8fafc;color:#1e293b;line-height:1.7}
@@ -43,6 +44,7 @@ footer .credit{color:#64748b;font-size:0.85rem;max-width:40rem;margin:8px auto 0
             <nav>
                 <a href="index.html">חיפוש</a>
                 <a href="news.html">חדשות</a>
+                <a href="deals.html">עסקאות</a>
                 <a href="how-it-works.html">איך זה עובד</a>
                 <a href="about.html">אודות</a>
                 <a href="privacy.html">פרטיות</a>
@@ -55,37 +57,11 @@ footer .credit{color:#64748b;font-size:0.85rem;max-width:40rem;margin:8px auto 0
         <section>
             <h2>הכתבות שלנו</h2>
             <!--
-            ====================================================
-            איך מוסיפים כתבה חדשה משלכם (מדריך קצר):
-            1. למטה מופיעה "תבנית כתבה". מעתיקים רק את השורות
-               שמתחילות ב-<article ומסתיימות ב-</article>.
-            2. מדביקים אותן ממש מתחת לשורה: ARTICLES-GO-HERE
-               (ככה הן יוצאות מחוץ להערה ויופיעו באתר).
-            3. מחליפים את הכותרת, התאריך והפסקאות בתוכן שלכם.
-               אם הכתבה מבוססת על מקור חיצוני, אפשר (רצוי!)
-               להשאיר את שורת "מקור" ולהחליף את
-               הדביקו-כאן-קישור-למקור בכתובת האמיתית.
-               אם אין מקור - פשוט מוחקים את שורת המקור.
-            4. בכתבה הראשונה שמוסיפים: מוחקים את השורה
-               "עדיין לא פורסמו כתבות..." שמתחת ל-ARTICLES-GO-HERE.
-            5. שומרים את הקובץ ומעלים אותו ל-GitHub. זה הכל!
-            אפשר להדביק כמה כתבות אחת מתחת לשנייה -
-            הכתבה העליונה תמיד תופיע ראשונה.
-            ====================================================
+            כתבות מתווספות דרך עמוד הניהול admin.html (עם האימייל והסיסמה
+            שהוגדרו ב-Supabase). אין צורך לערוך את הקובץ הזה כדי לפרסם.
             -->
-            <!-- ARTICLES-GO-HERE -->
-            <p class="empty-state">עדיין לא פורסמו כתבות. כשתצא הכתבה הראשונה שלנו, היא תופיע כאן.</p>
-            <!--
-            תבנית כתבה (מעתיקים רק מ-<article> עד </article>):
-
-            <article class="own-article">
-                <h3>כותרת הכתבה שלכם</h3>
-                <p class="date">7 בנובמבר 2026</p>
-                <p>הפסקה הראשונה של הכתבה...</p>
-                <p>פסקה נוספת...</p>
-                <p>מקור: <a href="הדביקו-כאן-קישור-למקור" target="_blank" rel="noopener">שם האתר שממנו לקחתם את החדשה</a></p>
-            </article>
-            -->
+            <div id="own-articles"></div>
+            <p id="empty-state" class="empty-state">עדיין לא פורסמו כתבות. כשתצא הכתבה הראשונה שלנו, היא תופיע כאן.</p>
         </section>
         <section>
             <h2>חדשות מהעולם</h2>
@@ -96,6 +72,7 @@ footer .credit{color:#64748b;font-size:0.85rem;max-width:40rem;margin:8px auto 0
         <nav>
             <a href="index.html">חיפוש</a>
             <a href="news.html">חדשות</a>
+            <a href="deals.html">עסקאות</a>
             <a href="how-it-works.html">איך זה עובד</a>
             <a href="about.html">אודות</a>
             <a href="privacy.html">פרטיות</a>
@@ -105,5 +82,65 @@ footer .credit{color:#64748b;font-size:0.85rem;max-width:40rem;margin:8px auto 0
         <p class="disclaimer">האתר בפיתוח. ההערכות מתוכננות להתבסס על מכירות שהסתיימו ב-eBay; כשהן יוצגו, הן יהיו הערכה סטטיסטית בלבד ולא שמאות מקצועית או הבטחה למחיר מכירה בפועל.</p>
         <p class="credit">נתוני ותמונות הקלפים מסופקים על ידי <a href="https://tcgdex.net" target="_blank" rel="noopener">TCGdex</a>. פוקימון ושמות הקלפים הם סימנים מסחריים של Nintendo/Creatures Inc./GAME FREAK inc.</p>
     </footer>
+    <script>
+    (function(){
+        // אותם שני ערכים ציבוריים כמו ב-admin.html (לא סוד)
+        var SUPABASE_URL = 'https://yfxsvmujskqvtlnnfvog.supabase.co';
+        var SUPABASE_ANON_KEY = 'sb_publishable_9rKl0u1M4cndyvhN4wzA0A_zbsmtFch';
+
+        if (SUPABASE_URL.indexOf('PASTE-') === 0 || SUPABASE_ANON_KEY.indexOf('PASTE-') === 0){
+            return; // ההגדרות עוד לא הוזנו - מוצג מצב ריק בלבד
+        }
+
+        var sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+        function fmtDate(iso){
+            var d = new Date(iso);
+            return isNaN(d) ? '' : d.toLocaleDateString('he-IL', {day:'numeric', month:'long', year:'numeric'});
+        }
+
+        sb.from('articles').select('title,body,source_name,source_url,published_at').order('published_at', {ascending:false})
+            .then(function(res){
+                if (res.error || !res.data || !res.data.length) return; // נשאר מצב ריק
+                document.getElementById('empty-state').style.display = 'none';
+                var box = document.getElementById('own-articles');
+                res.data.forEach(function(a){
+                    var art = document.createElement('article');
+                    art.className = 'own-article';
+                    var h = document.createElement('h3');
+                    h.textContent = a.title;
+                    var d = document.createElement('p');
+                    d.className = 'date';
+                    d.textContent = fmtDate(a.published_at);
+                    art.appendChild(h);
+                    art.appendChild(d);
+                    // פסקאות מופרדות בשורה ריקה; כל הטקסט מוזן כ-textContent בלבד (בטוח)
+                    String(a.body || '').split(/\n\s*\n/).forEach(function(par){
+                        par = par.trim();
+                        if (!par) return;
+                        var p = document.createElement('p');
+                        p.textContent = par;
+                        art.appendChild(p);
+                    });
+                    if (a.source_url && /^https:\/\//i.test(a.source_url)){
+                        var sp = document.createElement('p');
+                        var link = document.createElement('a');
+                        link.href = a.source_url;
+                        link.target = '_blank';
+                        link.rel = 'noopener';
+                        link.textContent = a.source_name || 'מקור';
+                        sp.appendChild(document.createTextNode('מקור: '));
+                        sp.appendChild(link);
+                        art.appendChild(sp);
+                    } else if (a.source_name){
+                        var sp2 = document.createElement('p');
+                        sp2.textContent = 'מקור: ' + a.source_name;
+                        art.appendChild(sp2);
+                    }
+                    box.appendChild(art);
+                });
+            });
+    })();
+    </script>
 </body>
 </html>
