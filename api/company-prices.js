@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import { providerCacheTag } from './_sales-provider.js';
+import { providerCacheTag, normalizeVariant } from './_sales-provider.js';
 
 // Passive batch read for the click model (owner-approved Nov7): returns every
 // per-company+grade cached value for the card that is still fresh (<=14 days),
@@ -29,9 +29,16 @@ export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET');
 
-  const { card, language } = req.query;
+  const { card, language, variant } = req.query;
   if (!card || !language) {
     return res.status(400).json({ error: 'Missing parameters' });
+  }
+  // Same variant contract as the click endpoint (owner approval Nov7 22:15):
+  // only cells stored for THIS variant auto-display; mixed-variant rows (no
+  // suffix) are never served for a variant lookup, and vice versa.
+  const variantKey = normalizeVariant(variant);
+  if (variant !== undefined && variant !== '' && !variantKey) {
+    return res.status(400).json({ error: 'Invalid variant' });
   }
   if (!LANGUAGES.includes(language)) {
     return res.status(400).json({ error: 'Invalid language' });
@@ -71,9 +78,15 @@ export default async function handler(req, res) {
       // 17:36): its recorded sales are this site's own deal reports, so any
       // cached EAS row is excluded here rather than displayed as a company price.
       .filter(r => !String(r.card_key).toLowerCase().endsWith('|eas'))
+      .filter(r => {
+        const key = String(r.card_key);
+        const hasVariantSuffix = key.includes('|v:');
+        if (variantKey) return key.endsWith('|v:' + variantKey);
+        return !hasVariantSuffix;
+      })
       .filter(r => (now - new Date(r.updated_at).getTime()) < CACHE_TTL_MS)
       .map(r => ({
-        grader: String(r.card_key).slice(keyPrefix.length).toUpperCase(),
+        grader: String(r.card_key).slice(keyPrefix.length).split('|v:')[0].toUpperCase(),
         grade: r.grade,
         price: r.price,
         total_sales: r.sample_count,

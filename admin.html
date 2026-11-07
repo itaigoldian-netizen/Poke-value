@@ -238,6 +238,11 @@ button.small{padding:8px 18px;font-size:.95rem;margin:14px 12px 0 0}
         });
 
         var GRADER_NAMES = {EAS:'EAS', PSA:'PSA', BGS:'BGS', CGC:'CGC', SGC:'SGC', other:'דירוג'};
+        var VARIANT_LABELS = {'first-edition':'מהדורה ראשונה','unlimited':'Unlimited','holo':'הולו','non-holo':'לא הולו','reverse':'Reverse Holo','w-promo':'W Promo'};
+        function variantLabelOf(key){
+            if (key === 'unknown') return 'גרסה לא ידועה';
+            return String(key || '').split('+').map(function(t){ return VARIANT_LABELS[t] || t; }).join(' · ');
+        }
 
         function fmtPrice(price, currency){
             var n = Number(price);
@@ -258,6 +263,7 @@ button.small{padding:8px 18px;font-size:.95rem;margin:14px 12px 0 0}
             if (d) parts.push('ב-' + d);
             if (t.card_set_name || t.card_number) parts.push([t.card_set_name, t.card_number].filter(Boolean).join(' · '));
             if (t.language) parts.push('שפה: ' + (LANG_NAMES[t.language] || t.language));
+            parts.push('גרסה: ' + (t.variant ? variantLabelOf(t.variant) : 'לא צוין'));
             if (!t.tcg_id) parts.push('ללא זיהוי מדויק');
             if (t.grader && t.grade) parts.push((GRADER_NAMES[t.grader] || t.grader) + ' ' + t.grade);
             parts.push(t.reporter ? 'דווח על ידי ' + t.reporter : 'דיווח אנונימי');
@@ -283,7 +289,7 @@ button.small{padding:8px 18px;font-size:.95rem;margin:14px 12px 0 0}
         // ולכן המחיקה בטוחה. אם בעתיד יתווסף חישוב שמשתמש בדיווחים, חובה שהמחיקה תוציא את
         // הדיווח גם מהתוצאות והמטמון הנגזרים - אסור להשאיר אותו נספר.
         function loadTrades(){
-            sb.from('community_trades').select('id,card_name,tcg_id,card_set_name,card_number,language,direction,price,currency,trade_date,grader,grade,reporter,status')
+            sb.from('community_trades').select('id,card_name,tcg_id,card_set_name,card_number,language,direction,price,currency,trade_date,grader,grade,variant,reporter,status')
                 .order('created_at', {ascending:false})
                 .then(function(res){
                     var pendingBox = document.getElementById('pending-list');

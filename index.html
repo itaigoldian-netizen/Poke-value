@@ -61,6 +61,12 @@ body{font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif}
 .pv-selected .info .set{color:#64748b;margin:0 0 12px}
 .pv-change{background:#fff;border:1px solid #2563eb;border-radius:10px;color:#2563eb;padding:10px 22px;cursor:pointer;font-size:1rem;font-weight:600;transition:background .15s}
 .pv-matrix-wrap{overflow-x:auto;margin-bottom:8px}
+.pv-variant-row{margin-bottom:12px;text-align:center}
+.pv-variant-row .pv-vlabel{font-weight:600;color:#334155;font-size:.95rem;margin-bottom:6px;display:block}
+.pv-variant-row .pv-vnote{color:#b45309;font-size:.9rem;margin-bottom:6px;display:block}
+.pv-vchip{display:inline-block;background:#fff;border:1px solid #cbd5e1;border-radius:999px;padding:6px 14px;margin:0 4px 6px;cursor:pointer;font-family:inherit;font-size:.95rem;color:#1e293b;transition:border-color .15s,background .15s}
+.pv-vchip:hover{border-color:#2563eb}
+.pv-vchip.pv-vsel{background:#2563eb;border-color:#2563eb;color:#fff}
 .pv-raw-row{display:flex;gap:10px;align-items:stretch;margin-bottom:8px}
 .pv-raw-row .pv-grade-lbl{position:static;box-shadow:none;display:flex;align-items:center}
 .pv-raw-row .pv-gcell{flex:1}
@@ -154,6 +160,7 @@ body{font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif}
             </div>
             <div id="results" class="hidden bg-white border border-slate-200 rounded-xl shadow-sm p-6">
                 <h2 id="resultTitle" class="text-2xl font-bold text-slate-800 mb-6 text-center"></h2>
+                <div id="variantRow" class="pv-variant-row hidden"></div>
                 <div class="pv-raw-row" id="rawRow"></div>
                 <div class="pv-matrix-wrap" id="matrixWrap">
                     <table class="pv-matrix">
@@ -460,6 +467,16 @@ body{font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif}
                 image_url: (card.image ? String(card.image) + '/high.png' : null)
             };
             updateFavButton();
+            // Variant separation (owner approval Nov7 22:15): the candidates
+            // list carries no variant flags, so the full card record is
+            // fetched here; showPrices uses it to offer a variant choice when
+            // the printing has more than one finish/edition.
+            try {
+                const dr = await fetch(`${TCGDEX_API}/${TCGDEX_LANG[langAtPick]}/cards/${encodeURIComponent(card.id)}`);
+                card.variants = dr.ok ? ((await dr.json()) || {}).variants || {} : null;
+            } catch { card.variants = null; }
+            if (tokenAtPick !== searchToken || langAtPick !== currentLanguage) return; // stale
+            card.variantKey = null;
             showPrices(card);
         }
 
@@ -590,6 +607,73 @@ body{font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif}
         const MATRIX_GRADERS = ['PSA', 'BGS', 'CGC', 'TAG'];
         const cellInflight = new Set(); // repeated clicks join the same request
 
+        // ===== Variant separation (owner approval Nov7 22:15) =====
+        // One printing can exist in several finishes/editions (1st edition vs
+        // unlimited, holo vs reverse vs non-holo, W-promo). Their sold prices
+        // differ and must never merge. TCGdex reports which variants exist via
+        // the card detail's variants flags; from those flags we build the
+        // choice list. A variant token appears only when the printing actually
+        // splits on that dimension, so single-variant cards keep plain keys.
+        const VARIANT_LABELS = {
+            'first-edition': 'מהדורה ראשונה', 'unlimited': 'Unlimited',
+            'holo': 'הולו', 'non-holo': 'לא הולו', 'reverse': 'Reverse Holo', 'w-promo': 'W Promo',
+        };
+        const variantRow = document.getElementById('variantRow');
+
+        function variantOptionsOf(v) {
+            if (!v) return null; // variants record unavailable -> ambiguous
+            const editions = [];
+            if (v.firstEdition) editions.push('first-edition', 'unlimited');
+            const finishes = [];
+            if (v.normal) finishes.push('non-holo');
+            if (v.holo) finishes.push('holo');
+            if (v.reverse) finishes.push('reverse');
+            if (v.wPromo) finishes.push('w-promo');
+            if (editions.length > 1 && finishes.length > 1) {
+                const out = [];
+                for (const e of editions) for (const f of finishes) out.push(e + '+' + f);
+                return out;
+            }
+            if (editions.length > 1) return editions;
+            if (finishes.length > 1) return finishes;
+            return []; // at most one distinct variant: no choice needed
+        }
+
+        function renderVariantPicker(card) {
+            variantRow.innerHTML = '';
+            if (card.variants === null) {
+                variantRow.classList.remove('hidden');
+                const note = document.createElement('span');
+                note.className = 'pv-vnote';
+                note.textContent = 'לא ניתן לאמת את גרסת הקלף, לכן טעינת שווי חסומה כדי למנוע ערבוב של גרסאות שונות.';
+                variantRow.appendChild(note);
+                return { needsPick: true, blocked: true };
+            }
+            const options = variantOptionsOf(card.variants);
+            if (!options || options.length <= 1) {
+                variantRow.classList.add('hidden');
+                return { needsPick: false };
+            }
+            variantRow.classList.remove('hidden');
+            const label = document.createElement('span');
+            label.className = 'pv-vlabel';
+            label.textContent = 'לקלף הזה כמה גרסאות עם שווי שונה. בחרו גרסה:';
+            variantRow.appendChild(label);
+            options.forEach(function(key) {
+                const chip = document.createElement('button');
+                chip.type = 'button';
+                chip.className = 'pv-vchip' + (card.variantKey === key ? ' pv-vsel' : '');
+                chip.textContent = key.split('+').map(function(t) { return VARIANT_LABELS[t] || t; }).join(' · ');
+                chip.addEventListener('click', function() {
+                    if (card.variantKey === key) return;
+                    card.variantKey = key;
+                    runPriceLookup(card);
+                });
+                variantRow.appendChild(chip);
+            });
+            return { needsPick: !card.variantKey };
+        }
+
         function runPriceLookup(card) {
             if (!SEARCH_ENABLED) return; // development build: price lookup paused
             const cardQuery = card.priceQuery || searchInput.value.trim(); // exact picked identity, never just the typed text
@@ -616,6 +700,8 @@ body{font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif}
             });
             matrixHead.appendChild(headRow);
 
+            const pick = renderVariantPicker(card);
+
             // Raw sits outside the scrolling grid so its price/date/condition
             // are always fully visible at any horizontal scroll position.
             const rawRowEl = document.getElementById('rawRow');
@@ -624,7 +710,7 @@ body{font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif}
             rawLbl.className = 'pv-grade-lbl';
             rawLbl.textContent = 'לא מדורג';
             rawRowEl.appendChild(rawLbl);
-            rawRowEl.appendChild(makeCell(cardQuery, 'RAW', 0));
+            rawRowEl.appendChild(makeCell(card, cardQuery, 'RAW', 0, pick));
 
             for (let grade = 10; grade >= 1; grade--) {
                 const tr = document.createElement('tr');
@@ -634,25 +720,31 @@ body{font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif}
                 tr.appendChild(lbl);
                 MATRIX_GRADERS.forEach(function(g) {
                     const td = document.createElement('td');
-                    td.appendChild(makeCell(cardQuery, g, grade));
+                    td.appendChild(makeCell(card, cardQuery, g, grade, pick));
                     tr.appendChild(td);
                 });
                 matrixBody.appendChild(tr);
             }
-            preloadCachedPrices(cardQuery); // passive: fills fresh cached cells only
+            if (!pick.needsPick) preloadCachedPrices(cardQuery, card.variantKey); // passive: fills fresh cached cells only
             // RTL overflow starts at the left in some browsers; anchor the view
             // to the right so the grade column and first companies are visible.
             const mw = document.getElementById('matrixWrap');
             if (mw) mw.scrollLeft = 0;
         }
 
-        function makeCell(cardQuery, grader, grade) {
+        function makeCell(card, cardQuery, grader, grade, pick) {
             const btn = document.createElement('button');
             btn.type = 'button';
             btn.className = 'pv-gcell';
             btn.id = 'cell-' + grader + '-' + grade;
+            if (pick && pick.needsPick) {
+                // Ambiguous variant: never offer a lookup that would mix variants.
+                btn.disabled = true;
+                btn.innerHTML = '<span class="cta">' + (pick.blocked ? 'אימות גרסה נכשל' : 'בחרו גרסה') + '</span>';
+                return btn;
+            }
             btn.innerHTML = '<span class="cta">לחץ לטעינת שווי</span>';
-            btn.addEventListener('click', function() { loadCompanyPrice(btn, cardQuery, grader, grade); });
+            btn.addEventListener('click', function() { loadCompanyPrice(btn, cardQuery, grader, grade, card.variantKey); });
             return btn;
         }
 
@@ -669,9 +761,10 @@ body{font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif}
         // Passive batch read: fresh cached cells display automatically with
         // their update date. Never triggers a provider fetch; on any failure
         // the cells simply stay in their click-to-load state.
-        async function preloadCachedPrices(cardQuery) {
+        async function preloadCachedPrices(cardQuery, variantKey) {
             try {
-                const response = await fetch(`/api/company-prices?card=${encodeURIComponent(cardQuery)}&language=${encodeURIComponent(currentLanguage)}`);
+                const vp = variantKey ? `&variant=${encodeURIComponent(variantKey)}` : '';
+                const response = await fetch(`/api/company-prices?card=${encodeURIComponent(cardQuery)}&language=${encodeURIComponent(currentLanguage)}${vp}`);
                 if (!response.ok) return;
                 let data = null;
                 try { data = await response.json(); } catch (e) { return; }
@@ -686,8 +779,8 @@ body{font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif}
             } catch { /* passive read failure: cells stay click-to-load */ }
         }
 
-        async function loadCompanyPrice(btn, cardQuery, grader, grade) {
-            const key = grader + ':' + grade;
+        async function loadCompanyPrice(btn, cardQuery, grader, grade, variantKey) {
+            const key = grader + ':' + grade + ':' + (variantKey || '');
             if (cellInflight.has(key)) return;
             cellInflight.add(key);
             btn.disabled = true;
@@ -695,6 +788,7 @@ body{font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif}
             try {
                 let url = `/api/company-price?card=${encodeURIComponent(cardQuery)}&language=${encodeURIComponent(currentLanguage)}&grader=${encodeURIComponent(grader)}`;
                 if (grader !== 'RAW') url += `&grade=${grade}`;
+                if (variantKey) url += `&variant=${encodeURIComponent(variantKey)}`;
                 const response = await fetch(url);
                 let data = null;
                 try { data = await response.json(); } catch (e) { data = null; }

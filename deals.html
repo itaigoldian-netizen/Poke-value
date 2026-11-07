@@ -58,6 +58,12 @@ button.link:hover{background:#eff6ff}
 .sel-card button{margin-top:0;margin-inline-start:auto}
 .noimg{width:100%;aspect-ratio:63/88;background:#e2e8f0;border-radius:6px;display:flex;align-items:center;justify-content:center;color:#64748b;font-size:.7rem;text-align:center;padding:4px}
 .sel-card .noimg{width:64px}
+.variant-pick{margin-top:8px}
+.variant-pick .vlabel{font-weight:600;color:#334155;font-size:.9rem;display:block;margin-bottom:4px}
+.variant-pick .vnote{color:#b45309;font-size:.85rem;display:block;margin-bottom:4px}
+.vchip{display:inline-block;background:#fff;border:1px solid #cbd5e1;border-radius:999px;padding:5px 12px;margin:0 4px 6px;cursor:pointer;font-family:inherit;font-size:.9rem;color:#1e293b}
+.vchip:hover{border-color:#2563eb}
+.vchip.vsel{background:#2563eb;border-color:#2563eb;color:#fff}
     </style>
 </head>
 <body>
@@ -124,6 +130,7 @@ button.link:hover{background:#eff6ff}
                 </div>
                 <button id="change-card" type="button" class="link">החלפת קלף</button>
             </div>
+            <div id="variant-pick" class="variant-pick hidden"></div>
             <div id="manual-wrap" class="hidden">
                 <label for="card-name-manual">שם הקלף (רשמה ידנית)</label>
                 <input id="card-name-manual" type="text" maxlength="120" placeholder="לדוגמה: Charizard Base Set 4/102">
@@ -226,7 +233,7 @@ button.link:hover{background:#eff6ff}
         }
 
         function loadTrades(){
-            sb.from('community_trades').select('card_name,card_set_name,card_number,language,direction,price,currency,trade_date,grader,grade,reporter')
+            sb.from('community_trades').select('card_name,card_set_name,card_number,language,direction,price,currency,trade_date,grader,grade,variant,reporter')
                 .eq('status', 'approved')
                 .order('trade_date', {ascending:false})
                 .order('created_at', {ascending:false})
@@ -261,6 +268,7 @@ button.link:hover{background:#eff6ff}
                         if (d) parts.push('ב-' + d);
                         if (t.card_set_name || t.card_number) parts.push([t.card_set_name, t.card_number].filter(Boolean).join(' · '));
                         if (t.language) parts.push('שפה: ' + (LANG_NAMES[t.language] || t.language));
+                        parts.push('גרסה: ' + (t.variant ? variantLabelOf(t.variant) : 'לא צוין'));
                         parts.push(t.reporter ? 'דווח על ידי ' + t.reporter : 'דיווח אנונימי');
                         meta.textContent = parts.join(' · ');
                         div.appendChild(h);
@@ -274,6 +282,64 @@ button.link:hover{background:#eff6ff}
         var TCGDEX_LANG = { English: 'en', Japanese: 'ja', Chinese: 'zh-cn', Korean: 'ko' };
         var TCGDEX_API = 'https://api.tcgdex.net/v2';
         var pickedCard = null;   // {tcg_id, name, set_id, set_name, number}
+        var pickedVariant = null;      // variant key, 'unknown', or null when the card has a single variant
+        var variantPickState = null;   // null | 'loading' | 'none' | 'required' | 'failed'
+
+        // Variant separation (owner approval Nov7 22:15): same option builder
+        // as the search page. A report for a multi-variant card must name its
+        // variant, or be explicitly marked unknown - never silently mixed.
+        var VARIANT_LABELS = {
+            'first-edition': 'מהדורה ראשונה', 'unlimited': 'Unlimited',
+            'holo': 'הולו', 'non-holo': 'לא הולו', 'reverse': 'Reverse Holo', 'w-promo': 'W Promo',
+        };
+        function variantLabelOf(key){
+            if (key === 'unknown') return 'גרסה לא ידועה';
+            return String(key || '').split('+').map(function(t){ return VARIANT_LABELS[t] || t; }).join(' · ');
+        }
+        function variantOptionsOf(v){
+            if (!v) return null;
+            var editions = [];
+            if (v.firstEdition) editions.push('first-edition', 'unlimited');
+            var finishes = [];
+            if (v.normal) finishes.push('non-holo');
+            if (v.holo) finishes.push('holo');
+            if (v.reverse) finishes.push('reverse');
+            if (v.wPromo) finishes.push('w-promo');
+            if (editions.length > 1 && finishes.length > 1){
+                var out = [];
+                editions.forEach(function(e){ finishes.forEach(function(f){ out.push(e + '+' + f); }); });
+                return out;
+            }
+            if (editions.length > 1) return editions;
+            if (finishes.length > 1) return finishes;
+            return [];
+        }
+        function renderVariantPick(){
+            var box = document.getElementById('variant-pick');
+            box.innerHTML = '';
+            if (!variantPickState || variantPickState === 'none'){ box.classList.add('hidden'); return; }
+            box.classList.remove('hidden');
+            if (variantPickState === 'loading'){
+                var l = document.createElement('span'); l.className = 'vnote'; l.textContent = 'טוען את גרסאות הקלף...';
+                box.appendChild(l); return;
+            }
+            if (variantPickState === 'failed'){
+                var n = document.createElement('span'); n.className = 'vnote';
+                n.textContent = 'לא ניתן לטעון את גרסאות הקלף - הדיווח יסומן כגרסה לא ידועה.';
+                box.appendChild(n); return;
+            }
+            var lbl = document.createElement('span'); lbl.className = 'vlabel';
+            lbl.textContent = 'לקלף הזה כמה גרסאות עם שווי שונה. באיזו גרסה הייתה העסקה?';
+            box.appendChild(lbl);
+            variantOptionsOf(pickedCard.variants).concat(['unknown']).forEach(function(key){
+                var chip = document.createElement('button');
+                chip.type = 'button';
+                chip.className = 'vchip' + (pickedVariant === key ? ' vsel' : '');
+                chip.textContent = key === 'unknown' ? 'לא בטוח' : variantLabelOf(key);
+                chip.addEventListener('click', function(){ pickedVariant = key; renderVariantPick(); });
+                box.appendChild(chip);
+            });
+        }
         var manualMode = false;
         var searchToken = 0;
 
@@ -307,7 +373,10 @@ button.link:hover{background:#eff6ff}
 
         function clearPick(){
             pickedCard = null;
+            pickedVariant = null;
+            variantPickState = null;
             hide('sel-card');
+            renderVariantPick();
             document.getElementById('pick-grid').innerHTML = '';
             hide('pick-grid');
         }
@@ -331,6 +400,27 @@ button.link:hover{background:#eff6ff}
             show('sel-card');
             manualMode = false;
             hide('manual-wrap');
+            // Load variant flags for this exact printing; the pick list lacks them.
+            pickedVariant = null;
+            variantPickState = 'loading';
+            renderVariantPick();
+            var lang = document.getElementById('card-lang').value;
+            var tcgLang = TCGDEX_LANG[lang] || 'en';
+            var tcgId = card.id;
+            fetch(TCGDEX_API + '/' + tcgLang + '/cards/' + encodeURIComponent(tcgId)).then(function(dr){
+                return dr.ok ? dr.json() : null;
+            }).then(function(detail){
+                if (!pickedCard || pickedCard.tcg_id !== tcgId) return; // stale
+                if (!detail){ variantPickState = 'failed'; pickedVariant = 'unknown'; renderVariantPick(); return; }
+                pickedCard.variants = detail.variants || {};
+                var opts = variantOptionsOf(pickedCard.variants);
+                if (!opts || opts.length <= 1){ variantPickState = 'none'; }
+                else { variantPickState = 'required'; }
+                renderVariantPick();
+            }).catch(function(){
+                if (!pickedCard || pickedCard.tcg_id !== tcgId) return;
+                variantPickState = 'failed'; pickedVariant = 'unknown'; renderVariantPick();
+            });
         }
 
         document.getElementById('search-btn').addEventListener('click', function(){
@@ -450,6 +540,10 @@ button.link:hover{background:#eff6ff}
             if (!tradeDate){ err('חובה לבחור את תאריך העסקה.'); return; }
             if (tradeDate > new Date().toISOString().slice(0,10)){ err('תאריך העסקה לא יכול להיות בעתיד.'); return; }
             if (grader && !grade){ err('בחרתם דירוג - חובה למלא גם את הציון.'); return; }
+            if (!manualMode && variantPickState === 'required' && !pickedVariant){
+                err('לקלף הזה כמה גרסאות - בחרו את הגרסה, או "לא בטוח".'); return;
+            }
+            var variantVal = manualMode ? null : (variantPickState === 'required' ? pickedVariant : (variantPickState === 'failed' ? 'unknown' : null));
 
             msgEl.textContent = 'שולח...';
             msgEl.className = 'msg ok';
@@ -466,6 +560,7 @@ button.link:hover{background:#eff6ff}
                 trade_date: tradeDate,
                 grader: grader || null,
                 grade: grader ? grade : null,
+                variant: variantVal,
                 reporter: reporter || null,
                 status: 'pending'
             }).then(function(res){

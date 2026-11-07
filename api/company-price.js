@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import { fetchSales, providerKeyConfigured, providerCacheTag } from './_sales-provider.js';
+import { fetchSales, providerKeyConfigured, providerCacheTag, normalizeVariant } from './_sales-provider.js';
 
 // Per-company+grade lookup (owner-approved click model, Nov7): one request
 // serves exactly one cell. A fresh cached value (<=14 days) is served from
@@ -42,17 +42,27 @@ function errMsg(err) {
   return m.replace(/https?:\/\/\S+/g, '[url]');
 }
 
-function cacheKeyFor(queryKey, grader) {
-  return CACHE_KEY_PREFIX + providerCacheTag() + ':' + queryKey + '|' + grader.toLowerCase();
+// The variant is part of the key (owner approval Nov7 22:15): a value
+// computed from mixed-variant sales is never served for a specific variant,
+// and a value stored for one variant is never served for another. Keys for
+// single-variant cards carry no suffix, so their pre-variant rows stay valid
+// (no mixing is possible there by definition).
+function cacheKeyFor(queryKey, grader, variantKey) {
+  return CACHE_KEY_PREFIX + providerCacheTag() + ':' + queryKey + '|' + grader.toLowerCase()
+    + (variantKey ? '|v:' + variantKey : '');
 }
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET');
 
-  const { card, language, grader, grade } = req.query;
+  const { card, language, grader, grade, variant } = req.query;
   if (!card || !language || !grader) {
     return res.status(400).json({ error: 'Missing parameters' });
+  }
+  const variantKey = normalizeVariant(variant);
+  if (variant !== undefined && variant !== '' && !variantKey) {
+    return res.status(400).json({ error: 'Invalid variant' });
   }
 
   const graderKey = String(grader).toUpperCase();
@@ -85,7 +95,7 @@ export default async function handler(req, res) {
   }
 
   const queryKey = card.trim().toLowerCase().replace(/\s+/g, ' ');
-  const cacheKey = cacheKeyFor(queryKey, graderKey);
+  const cacheKey = cacheKeyFor(queryKey, graderKey, variantKey);
 
   try {
     const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
@@ -123,7 +133,7 @@ export default async function handler(req, res) {
 
     let sales;
     try {
-      sales = await fetchSales(queryKey, graderKey, gradeValue, language);
+      sales = await fetchSales(queryKey, graderKey, gradeValue, language, variantKey);
     } catch (err) {
       // Message only: never log request URLs, they contain the API key.
       console.error('sales fetch failed for ' + graderKey + ' ' + gradeValue + ': ' + errMsg(err));
@@ -143,6 +153,7 @@ export default async function handler(req, res) {
     const payload = {
       card_name: card.trim(),
       language,
+      variant: variantKey,
       grader: graderKey,
       grade: gradeValue,
       price: finalPrice,
