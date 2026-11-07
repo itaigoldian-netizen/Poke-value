@@ -10,7 +10,9 @@ const LANG_PATTERNS = {
   Chinese: /\b(chinese|china|chn|simplified|traditional)\b/i,
 };
 
-const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+// Cache validity: 14 days (owner request Nov7, was 24h). Responses carry
+// updated_at so the display shows the stored value's age.
+const CACHE_TTL_MS = 14 * 24 * 60 * 60 * 1000;
 
 function errMsg(err) {
   let m = err && err.message ? err.message : String(err);

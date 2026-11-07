@@ -58,15 +58,20 @@ body{font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif}
 .pv-selected .info h2{font-size:1.35rem;font-weight:800;color:#0f172a;margin:0 0 6px}
 .pv-selected .info .set{color:#64748b;margin:0 0 12px}
 .pv-change{background:#fff;border:1px solid #2563eb;border-radius:10px;color:#2563eb;padding:10px 22px;cursor:pointer;font-size:1rem;font-weight:600;transition:background .15s}
-.pv-cells{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin-bottom:16px}
-.pv-cell{background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:10px 14px;min-width:110px;text-align:center}
-.pv-cell .lbl{font-size:.8rem;font-weight:700;color:#64748b}
-.pv-cell .val{font-size:1.15rem;font-weight:800;color:#059669}
-.pv-cell .val.nodata{color:#94a3b8;font-size:.9rem;font-weight:600}
-.pv-cell .vol{font-size:.75rem;color:#64748b}
-.pv-cell.est{border-style:dashed;border-color:#f59e0b}
-.pv-cell .est-badge{display:inline-block;font-size:.7rem;font-weight:700;color:#92400e;background:#fef3c7;border-radius:999px;padding:0 8px;margin-top:2px}
-.pv-updated{font-size:.8rem;color:#64748b;text-align:center;margin-bottom:12px}
+.pv-matrix-wrap{overflow-x:auto;margin-bottom:8px}
+.pv-matrix{border-collapse:collapse;width:100%;min-width:560px}
+.pv-matrix th{font-size:.85rem;font-weight:700;color:#475569;padding:6px 4px;border-bottom:1px solid #e2e8f0;text-align:center}
+.pv-matrix td{padding:3px;border-bottom:1px solid #f1f5f9;text-align:center}
+.pv-grade-lbl{font-weight:700;color:#334155;font-size:.85rem;white-space:nowrap}
+.pv-gcell{display:block;width:100%;background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:6px 4px;cursor:pointer;transition:border-color .15s;font-family:inherit}
+.pv-gcell:hover:not(:disabled){border-color:#2563eb}
+.pv-gcell:disabled{cursor:default}
+.pv-gcell span{display:block}
+.pv-gcell .cta{font-size:.75rem;color:#2563eb;font-weight:600}
+.pv-gcell .p{font-size:1rem;font-weight:800;color:#059669}
+.pv-gcell .m{font-size:.7rem;color:#64748b;margin-top:1px}
+.pv-gcell .nodata{font-size:.78rem;color:#94a3b8;font-weight:600;padding:4px 0}
+.pv-gcell .err{font-size:.72rem;color:#b91c1c}
 .pv-loading{color:#64748b;text-align:center}
 .pv-sales-title{font-size:1.05rem;font-weight:700;color:#1e293b;margin:16px 0 4px}
 .pv-sale{display:flex;justify-content:space-between;gap:10px;border-bottom:1px solid #f1f5f9;padding:8px 4px;font-size:.9rem}
@@ -105,7 +110,7 @@ body{font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif}
         <div class="dev-notice">האתר בפיתוח: אפשר לחפש קלף ולראות את התמונה שלו, אך הצגת המחירים מושהית זמנית וההערכות טרם אומתו.</div>
         <section class="intro-card">
             <h2>מה זה Poke Value?</h2>
-            <p>Poke Value הוא כלי בבנייה שמטרתו להעריך שווי של קלפי פוקימון מדורגים על בסיס מכירות שהסתיימו ב-eBay. הקלידו שם של קלף, בחרו את שפת הקלף ובחרו את הקלף המדויק מהתוצאות. כשהצגת המחירים תופעל, יוצג שווי לפי חברות דירוג שונות על בסיס מכירות שהסתיימו, לצד הערכת EAS מסומנת שלנו. איך ההערכה אמורה להיחשב ומה עדיין לא אומת? <a href="how-it-works.html">קראו את ההסבר המלא</a>.</p>
+            <p>Poke Value הוא כלי בבנייה שמטרתו להעריך שווי של קלפי פוקימון מדורגים על בסיס מכירות שהסתיימו ב-eBay. הקלידו שם של קלף, בחרו את שפת הקלף ובחרו את הקלף המדויק מהתוצאות. כשהצגת המחירים תופעל, תוצג טבלת חברות דירוג וציונים; לחיצה על תא תטען שווי ממכירות שהסתיימו באותה חברה וציון. איך ההערכה אמורה להיחשב ומה עדיין לא אומת? <a href="how-it-works.html">קראו את ההסבר המלא</a>.</p>
         </section>
         <div class="lang-row">
             <button data-lang="English" class="lang-btn active">English</button>
@@ -140,8 +145,13 @@ body{font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif}
             </div>
             <div id="results" class="hidden bg-white border border-slate-200 rounded-xl shadow-sm p-6">
                 <h2 id="resultTitle" class="text-2xl font-bold text-slate-800 mb-6 text-center"></h2>
-                <div id="priceCells" class="pv-cells"></div>
-                <p id="priceUpdated" class="pv-updated"></p>
+                <div class="pv-matrix-wrap">
+                    <table class="pv-matrix">
+                        <thead id="matrixHead"></thead>
+                        <tbody id="matrixBody"></tbody>
+                    </table>
+                </div>
+                <p class="pv-chart-note">לחיצה על תא טוענת שווי של אותה חברה וציון ממכירות שהסתיימו בפועל. מחיר שמור מוצג עם תאריך העדכון שלו.</p>
                 <div id="historySection" class="hidden">
                     <h3 class="pv-sales-title">היסטוריית מחירים</h3>
                     <div id="historyChart" dir="ltr"></div>
@@ -193,8 +203,8 @@ body{font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif}
         const priceArea = document.getElementById('priceArea');
         const resultsDiv = document.getElementById('results');
         const resultTitle = document.getElementById('resultTitle');
-        const priceCells = document.getElementById('priceCells');
-        const priceUpdated = document.getElementById('priceUpdated');
+        const matrixHead = document.getElementById('matrixHead');
+        const matrixBody = document.getElementById('matrixBody');
         const salesTitle = document.getElementById('salesTitle');
         const salesList = document.getElementById('salesList');
         const historySection = document.getElementById('historySection');
@@ -446,7 +456,7 @@ body{font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif}
             if (!SEARCH_ENABLED) {
                 resultsDiv.classList.add('hidden');
                 priceNoteCard.classList.remove('hidden');
-                priceNote.textContent = `הצגת המחירים מושהית זמנית. כשתופעל, יוצגו כאן שווי של ${card.name} לפי חברות דירוג שונות מנתוני מכירות, לצד הערכת EAS מסומנת. ההערכות טרם אומתו.`;
+                priceNote.textContent = `הצגת המחירים מושהית זמנית. כשתופעל, תוצג כאן טבלת חברות דירוג וציונים; לחיצה על תא תטען את השווי של ${card.name} באותה חברה וציון מנתוני מכירות. ההערכות טרם אומתו.`;
                 return;
             }
             priceNoteCard.classList.add('hidden');
@@ -465,41 +475,49 @@ body{font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif}
             return 'שגיאה (' + status + ')';
         }
 
-        // Target API contract (backend TBD after the data-source decision):
-        //   GET /api/prices?card=<exact picked identity>&language=<lang>
-        //   -> { updated_at: ISO string,
-        //        cells: [{ label: string (e.g. "לא מדורג", "PSA 9", "EAS 9"),
-        //                  price: number|null (null = no data, shown as such, never computed),
-        //                  currency: "USD"|"ILS", sales_count: number,
-        //                  is_estimate: boolean (true for our EAS estimate cells) }],
-        //        sales: [{ date: "YYYY-MM-DD", title, price, currency, grade_label, condition, source }],
-        //        history: [{ label, currency, is_estimate,
-        //                    points: [{ date: "YYYY-MM-DD", price, sales_count }] }] }
-        // Raw (ungraded) values come from actual ungraded sales only, never
-        // inferred from graded prices; a raw cell with no coverage stays
-        // "אין נתונים". Condition stays comparable: damaged/played raw copies
-        // must not merge with clean raw into one unqualified price - the
-        // backend emits condition-qualified cells (e.g. "לא מדורג (Played)")
-        // when conditions differ, and sales entries carry `condition`.
-        // history points must be real dated observations from the chosen source,
-        // never backfilled or interpolated; the current cache keeps no history,
-        // so until a source with dated sales exists the chart shows its
-        // insufficient-data state. A series never mixes currencies.
-        // Cell set is fully data-driven: no grader list is hardcoded here.
-        // The frontend makes one request per card instead of the old per-grade
-        // fanout (10 requests). Upstream provider cost depends on the future
-        // backend implementation and is NOT established by this change.
-        // Backend constraints when implemented: estimated cells (EAS) must keep
-        // their own currency/source distinct from real-sale cells, and
-        // unlike currencies must never be mixed in one aggregate. No valuation
-        // formula is wired in; v3 awaits owner approval.
-        async function runPriceLookup(card) {
+        // Price lookup model (owner-approved Nov7): cells are NOT preloaded.
+        // The matrix shows the graders this site covers plus a raw row; only a
+        // click on one company+grade cell sends a lookup for exactly that cell
+        // (PriceCharting-style). No formula across companies: each value comes
+        // from that company's own completed sales, and the raw value comes
+        // from ungraded sales only, never inferred from graded prices.
+        //
+        // Auto-display rule (owner, Nov7 16:36): a Supabase-cached value from
+        // the last 14 days displays automatically with its update date; only a
+        // stale or missing value waits for the user's click to fetch fresh data.
+        //
+        // Backend endpoints (implemented in api/company-price.js and
+        // api/company-prices.js, same provider integration as api/price.js):
+        //   GET /api/company-prices?card=<exact identity>&language=<lang>
+        //     passive batch read: all fresh (<=14d) cached cells for the card.
+        //     Never calls the provider.
+        //   GET /api/company-price?card=<exact identity>&language=<lang>
+        //       &grader=PSA|BGS|CGC|EAS|TAG|RAW[&grade=1..10]
+        //     click path: serves the fresh cached value, otherwise fetches the
+        //     provider, stores, and returns.
+        //   -> { card_name, language, grader, grade, price, total_sales,
+        //        updated_at, cached }
+        // In the current implementation one provider fetch serves one uncached
+        // cell; retries or future paging would change that, so it is not a
+        // guarantee. Supabase cache validity is 14 days (owner request Nov7,
+        // was 24h), and a loaded cell always shows the value's update date.
+        // Optional future response fields populate the sections below when a
+        // source with dated sales exists: sales:[{date,title,price,currency,
+        // grade_label,condition,source}] and history:[{label,currency,
+        // is_estimate,points:[{date,price,sales_count}]}]. history points must
+        // be real dated observations, never backfilled; a series never mixes
+        // currencies; damaged/played raw copies never merge with clean raw
+        // into one unqualified price.
+        // MATRIX_GRADERS mirrors the backend's coverage (api/company-price.js).
+        // These are clickable lookup cells, not preloaded data.
+        const MATRIX_GRADERS = ['PSA', 'BGS', 'CGC', 'EAS', 'TAG'];
+        const cellInflight = new Set(); // repeated clicks join the same request
+
+        function runPriceLookup(card) {
             if (!SEARCH_ENABLED) return; // development build: price lookup paused
             const cardQuery = card.priceQuery || searchInput.value.trim(); // exact picked identity, never just the typed text
             resultTitle.textContent = `${card.name} (${currentLanguage})`;
-            priceCells.innerHTML = '';
             salesList.innerHTML = '';
-            priceUpdated.textContent = '';
             salesTitle.classList.add('hidden');
             historySection.classList.add('hidden');
             historyChart.innerHTML = '';
@@ -507,21 +525,112 @@ body{font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif}
             historyNote.classList.add('hidden');
             historyEmpty.classList.add('hidden');
             resultsDiv.classList.remove('hidden');
-            const loading = document.createElement('p');
-            loading.className = 'pv-loading';
-            loading.textContent = 'טוען מחירים...';
-            priceCells.appendChild(loading);
+
+            matrixHead.innerHTML = '';
+            matrixBody.innerHTML = '';
+            const headRow = document.createElement('tr');
+            const th0 = document.createElement('th');
+            th0.textContent = 'ציון';
+            headRow.appendChild(th0);
+            MATRIX_GRADERS.forEach(function(g) {
+                const th = document.createElement('th');
+                th.textContent = g;
+                headRow.appendChild(th);
+            });
+            matrixHead.appendChild(headRow);
+
+            // Raw row first: ungraded value from ungraded sales only.
+            const rawRow = document.createElement('tr');
+            const rawLbl = document.createElement('td');
+            rawLbl.className = 'pv-grade-lbl';
+            rawLbl.textContent = 'לא מדורג';
+            rawRow.appendChild(rawLbl);
+            const rawTd = document.createElement('td');
+            rawTd.colSpan = MATRIX_GRADERS.length;
+            rawTd.appendChild(makeCell(cardQuery, 'RAW', 0));
+            rawRow.appendChild(rawTd);
+            matrixBody.appendChild(rawRow);
+
+            for (let grade = 10; grade >= 1; grade--) {
+                const tr = document.createElement('tr');
+                const lbl = document.createElement('td');
+                lbl.className = 'pv-grade-lbl';
+                lbl.textContent = grade;
+                tr.appendChild(lbl);
+                MATRIX_GRADERS.forEach(function(g) {
+                    const td = document.createElement('td');
+                    td.appendChild(makeCell(cardQuery, g, grade));
+                    tr.appendChild(td);
+                });
+                matrixBody.appendChild(tr);
+            }
+            preloadCachedPrices(cardQuery); // passive: fills fresh cached cells only
+        }
+
+        function makeCell(cardQuery, grader, grade) {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'pv-gcell';
+            btn.id = 'cell-' + grader + '-' + grade;
+            btn.innerHTML = '<span class="cta">לחץ לטעינת שווי</span>';
+            btn.addEventListener('click', function() { loadCompanyPrice(btn, cardQuery, grader, grade); });
+            return btn;
+        }
+
+        function fillLoadedCell(btn, price, totalSales, updatedAt) {
+            const upd = updatedAt ? new Date(updatedAt) : null;
+            const updTxt = upd && !isNaN(upd) ? ' · עודכן ' + upd.toLocaleDateString('he-IL', {day:'numeric', month:'numeric', year:'2-digit'}) : '';
+            btn.innerHTML = `<span class="p">${fmtCellPrice(price, 'USD')}</span><span class="m">${Number(totalSales) || 0} מכירות${updTxt}</span>`;
+            btn.disabled = true; // a current value is already shown; no repeat fetch
+        }
+
+        // Passive batch read: fresh cached cells display automatically with
+        // their update date. Never triggers a provider fetch; on any failure
+        // the cells simply stay in their click-to-load state.
+        async function preloadCachedPrices(cardQuery) {
             try {
-                const response = await fetch(`/api/prices?card=${encodeURIComponent(cardQuery)}&language=${encodeURIComponent(currentLanguage)}`);
+                const response = await fetch(`/api/company-prices?card=${encodeURIComponent(cardQuery)}&language=${encodeURIComponent(currentLanguage)}`);
+                if (!response.ok) return;
+                let data = null;
+                try { data = await response.json(); } catch (e) { return; }
+                if (!data || !Array.isArray(data.cells)) return;
+                data.cells.forEach(function(c) {
+                    if (!c || c.price === null || c.price === undefined || isNaN(Number(c.price))) return;
+                    const btn = document.getElementById('cell-' + c.grader + '-' + c.grade);
+                    if (btn && btn.disabled === false && btn.querySelector('.cta')) {
+                        fillLoadedCell(btn, c.price, c.total_sales, c.updated_at);
+                    }
+                });
+            } catch { /* passive read failure: cells stay click-to-load */ }
+        }
+
+        async function loadCompanyPrice(btn, cardQuery, grader, grade) {
+            const key = grader + ':' + grade;
+            if (cellInflight.has(key)) return;
+            cellInflight.add(key);
+            btn.disabled = true;
+            btn.innerHTML = '<span class="m">טוען...</span>';
+            try {
+                let url = `/api/company-price?card=${encodeURIComponent(cardQuery)}&language=${encodeURIComponent(currentLanguage)}&grader=${encodeURIComponent(grader)}`;
+                if (grader !== 'RAW') url += `&grade=${grade}`;
+                const response = await fetch(url);
                 let data = null;
                 try { data = await response.json(); } catch (e) { data = null; }
-                if (!response.ok || !data || !Array.isArray(data.cells)) {
-                    loading.textContent = apiErrorMessage(response.status);
-                    return;
+                if (response.ok && data && data.price !== null && data.price !== undefined && !isNaN(Number(data.price))) {
+                    fillLoadedCell(btn, data.price, data.total_sales, data.updated_at);
+                    if (Array.isArray(data.sales)) renderSales(data.sales);
+                    if (Array.isArray(data.history)) renderHistory(data.history);
+                } else if (response.status === 404) {
+                    btn.innerHTML = '<span class="nodata">אין נתונים</span>';
+                } else {
+                    btn.innerHTML = `<span class="err">${apiErrorMessage(response.status)}</span>`;
+                    btn.disabled = false; // transient failures stay retryable
                 }
-                renderPrices(data);
             } catch {
-                loading.textContent = 'בעיית תקשורת';
+                btn.innerHTML = '<span class="err">בעיית תקשורת</span>';
+                btn.disabled = false;
+            } finally {
+                cellInflight.delete(key);
             }
         }
 
@@ -622,65 +731,30 @@ body{font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif}
             return currency === 'ILS' ? s + ' ₪' : '$' + s;
         }
 
-        function renderPrices(data) {
-            priceCells.innerHTML = '';
-            if (!data.cells.length) {
-                const p = document.createElement('p');
-                p.className = 'pv-loading';
-                p.textContent = 'אין נתוני מחיר לקלף הזה כרגע.';
-                priceCells.appendChild(p);
-            }
-            data.cells.forEach(function(cell) {
-                const div = document.createElement('div');
-                div.className = 'pv-cell' + (cell.is_estimate ? ' est' : '');
-                const lbl = document.createElement('div');
-                lbl.className = 'lbl';
-                lbl.textContent = String(cell.label || '');
-                const val = document.createElement('div');
-                const hasPrice = cell.price !== null && cell.price !== undefined && !isNaN(Number(cell.price));
-                val.className = 'val' + (hasPrice ? '' : ' nodata');
-                val.textContent = hasPrice ? fmtCellPrice(cell.price, cell.currency) : 'אין נתונים';
-                const vol = document.createElement('div');
-                vol.className = 'vol';
-                const n = Number(cell.sales_count) || 0;
-                vol.textContent = n > 0 ? n + ' מכירות' : 'אין מכירות';
-                div.appendChild(lbl);
-                div.appendChild(val);
-                div.appendChild(vol);
-                if (cell.is_estimate) {
-                    const badge = document.createElement('span');
-                    badge.className = 'est-badge';
-                    badge.textContent = 'הערכה';
-                    div.appendChild(badge);
-                }
-                priceCells.appendChild(div);
+        // Optional section: shown only when a lookup response carries dated
+        // sales (no current response does; the sections stay hidden until a
+        // source provides them).
+        function renderSales(sales) {
+            if (!sales.length) return;
+            salesTitle.classList.remove('hidden');
+            sales.forEach(function(s) {
+                const row = document.createElement('div');
+                row.className = 'pv-sale';
+                const d = document.createElement('span');
+                d.className = 'd';
+                const dt = new Date(String(s.date || '') + 'T00:00:00');
+                d.textContent = isNaN(dt) ? '' : dt.toLocaleDateString('he-IL', {day:'numeric', month:'numeric', year:'numeric'});
+                const t = document.createElement('span');
+                t.className = 't';
+                t.textContent = (s.grade_label ? s.grade_label + ' · ' : '') + (s.condition ? String(s.condition) + ' · ' : '') + String(s.title || '');
+                const p = document.createElement('span');
+                p.className = 'p';
+                p.textContent = fmtCellPrice(s.price, s.currency);
+                row.appendChild(d);
+                row.appendChild(t);
+                row.appendChild(p);
+                salesList.appendChild(row);
             });
-            if (data.updated_at) {
-                const d = new Date(data.updated_at);
-                if (!isNaN(d)) priceUpdated.textContent = 'עודכן: ' + d.toLocaleString('he-IL', {day:'numeric', month:'long', year:'numeric', hour:'2-digit', minute:'2-digit'});
-            }
-            renderHistory(Array.isArray(data.history) ? data.history : []);
-            if (Array.isArray(data.sales) && data.sales.length) {
-                salesTitle.classList.remove('hidden');
-                data.sales.forEach(function(s) {
-                    const row = document.createElement('div');
-                    row.className = 'pv-sale';
-                    const d = document.createElement('span');
-                    d.className = 'd';
-                    const dt = new Date(String(s.date || '') + 'T00:00:00');
-                    d.textContent = isNaN(dt) ? '' : dt.toLocaleDateString('he-IL', {day:'numeric', month:'numeric', year:'numeric'});
-                    const t = document.createElement('span');
-                    t.className = 't';
-                    t.textContent = (s.grade_label ? s.grade_label + ' · ' : '') + (s.condition ? String(s.condition) + ' · ' : '') + String(s.title || '');
-                    const p = document.createElement('span');
-                    p.className = 'p';
-                    p.textContent = fmtCellPrice(s.price, s.currency);
-                    row.appendChild(d);
-                    row.appendChild(t);
-                    row.appendChild(p);
-                    salesList.appendChild(row);
-                });
-            }
         }
 
         // Deep links: ?q=<name> runs a card search; ?card=<tcgdex id> opens a
