@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>פרטיות - Poke Value</title>
+    <style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif;background:#f8fafc;color:#1e293b;line-height:1.7}
+header{background:#fff;border-bottom:1px solid #e2e8f0;padding:20px 16px;box-shadow:0 1px 2px rgba(0,0,0,.05)}
+header .wrap{max-width:48rem;margin:0 auto;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px}
+h1{font-size:1.5rem;font-weight:800}
+h1 span{color:#2563eb}
+nav a{color:#2563eb;text-decoration:underline;margin:0 8px;font-size:0.95rem}
+main{max-width:48rem;margin:0 auto;padding:32px 16px 48px}
+section{background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:20px 24px;margin-bottom:20px;box-shadow:0 1px 2px rgba(0,0,0,.05)}
+h2{font-size:1.2rem;font-weight:700;color:#1e293b;margin-bottom:10px}
+p{margin-bottom:10px;color:#475569}
+ul{margin:0 20px 10px 0;color:#475569}
+li{margin-bottom:6px}
+strong{color:#1e293b}
+footer{background:#fff;border-top:1px solid #e2e8f0;padding:24px 16px;text-align:center}
+footer .disclaimer{color:#64748b;font-size:0.85rem;max-width:40rem;margin:8px auto 0}
+.updated{color:#64748b;font-size:0.85rem}
+    </style>
+</head>
+<body>
+    <header>
+        <div class="wrap">
+            <h1>Poke <span>Value</span></h1>
+            <nav>
+                <a href="index.html">חיפוש</a>
+                <a href="how-it-works.html">איך זה עובד</a>
+                <a href="privacy.html">פרטיות</a>
+            </nav>
+        </div>
+    </header>
+    <main>
+        <section>
+            <h2>מדיניות פרטיות</h2>
+            <p class="updated">עדכון אחרון: נובמבר 2026</p>
+            <p>דף זה מתאר מה ידוע לנו על עיבוד הנתונים באתר כפי שהוא בנוי כיום. אם האתר ישתנה, הדף יעודכן.</p>
+        </section>
+        <section>
+            <h2>מה נאסף ונשמר</h2>
+            <ul>
+                <li><strong>כיום, במצב הפיתוח:</strong> הצגת המחירים מושהית. בעת חיפוש, טקסט החיפוש ושפת הקלף נשלחים ישירות מהדפדפן למאגר הקלפים החיצוני TCGdex בלבד, ותמונות הקלפים נטענות מהשרתים שלו. טקסט החיפוש לא נשלח לשרת האתר ולא נשמר בשום מסד נתונים.</li>
+                <li><strong>כשהצגת המחירים תופעל בעתיד:</strong> טקסט החיפוש יישלח לשרת האתר כדי לחשב את ההערכה, ויישמר יחד עם תוצאת החיפוש (שפה, ציון, מחיר ומספר מכירות) במטמון מסד נתונים (Supabase), כדי שחיפושים חוזרים של אותו קלף יוצגו מהר יותר לכל המשתמשים. תוצאה במטמון תיחשב מעודכנת עד כ-24 שעות; פקיעת התוקף היא של שימוש חוזר במטמון, ולא מחיקה אוטומטית של הרשומה. פסקה זו תעודכן לפני ההפעלה בפועל.</li>
+            </ul>
+        </section>
+        <section>
+            <h2>למי המידע נשלח</h2>
+            <ul>
+                <li><strong>מאגר הקלפים (כיום):</strong> כשאתם מחפשים קלף, טקסט החיפוש ושפת הקלף נשלחים למאגר הקלפים החיצוני TCGdex, ותמונות הקלפים נטענות ישירות מהשרתים שלו.</li>
+                <li><strong>ספק נתוני מכירות (רק כשהמחירים יופעלו בעתיד):</strong> טקסט החיפוש יישלח לספק חיצוני (ScraperAPI) שיבצע את החיפוש ב-eBay. כיום שירות זה מושהה ולא מקבל דבר.</li>
+                <li><strong>ספקי תשתית:</strong> האתר מתארח אצל Vercel ומשתמש ב-Supabase. ספקים אלה עשויים לרשום ביומני המערכת שלהם מידע טכני כגון כתובת IP, בכפוף למדיניות הפרטיות שלהם; תצורת הרישום ותקופות השמירה שלהם לא אומתו על ידינו, ואין הבטחת מחיקה תוך 24 שעות.</li>
+                <li>מעבר לזה, אין שיתוף יזום של המידע עם צדדים שלישיים.</li>
+            </ul>
+        </section>
+        <section>
+            <h2>מה קוד האתר עצמו לא עושה</h2>
+            <ul>
+                <li>אין הרשמה או חשבונות משתמש.</li>
+                <li>קוד האתר אינו מגדיר עוגיות, אינו משתמש באחסון מקומי בדפדפן, ואינו כולל כלי מדידה (analytics) או רכיבי פרסום.</li>
+            </ul>
+            <p>סעיף זה מתאר את קוד האתר בלבד; ספקי התשתית והנתונים פועלים לפי המדיניות שלהם, כמתואר בסעיף הקודם.</p>
+        </section>
+        <section>
+            <h2>שימו לב</h2>
+            <p>אל תקלידו בשורת החיפוש מידע אישי (כגון שם, כתובת או פרטי תשלום). החיפוש מיועד לשמות של קלפים בלבד.</p>
+        </section>
+    </main>
+    <footer>
+        <nav>
+            <a href="index.html">חיפוש</a>
+            <a href="how-it-works.html">איך זה עובד</a>
+            <a href="privacy.html">פרטיות</a>
+        </nav>
+        <p class="disclaimer">האתר בפיתוח. ההערכות מתוכננות להתבסס על מכירות שהסתיימו ב-eBay; כשהן יוצגו, הן יהיו הערכה סטטיסטית בלבד ולא שמאות מקצועית או הבטחה למחיר מכירה בפועל.</p>
+    </footer>
+</body>
+</html>
