@@ -58,6 +58,21 @@ body{font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif}
 .pv-selected .info h2{font-size:1.35rem;font-weight:800;color:#0f172a;margin:0 0 6px}
 .pv-selected .info .set{color:#64748b;margin:0 0 12px}
 .pv-change{background:#fff;border:1px solid #2563eb;border-radius:10px;color:#2563eb;padding:10px 22px;cursor:pointer;font-size:1rem;font-weight:600;transition:background .15s}
+.pv-cells{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin-bottom:16px}
+.pv-cell{background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:10px 14px;min-width:110px;text-align:center}
+.pv-cell .lbl{font-size:.8rem;font-weight:700;color:#64748b}
+.pv-cell .val{font-size:1.15rem;font-weight:800;color:#059669}
+.pv-cell .val.nodata{color:#94a3b8;font-size:.9rem;font-weight:600}
+.pv-cell .vol{font-size:.75rem;color:#64748b}
+.pv-cell.est{border-style:dashed;border-color:#f59e0b}
+.pv-cell .est-badge{display:inline-block;font-size:.7rem;font-weight:700;color:#92400e;background:#fef3c7;border-radius:999px;padding:0 8px;margin-top:2px}
+.pv-updated{font-size:.8rem;color:#64748b;text-align:center;margin-bottom:12px}
+.pv-loading{color:#64748b;text-align:center}
+.pv-sales-title{font-size:1.05rem;font-weight:700;color:#1e293b;margin:16px 0 4px}
+.pv-sale{display:flex;justify-content:space-between;gap:10px;border-bottom:1px solid #f1f5f9;padding:8px 4px;font-size:.9rem}
+.pv-sale .d{color:#64748b;white-space:nowrap}
+.pv-sale .t{flex:1;color:#334155;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:right}
+.pv-sale .p{font-weight:700;color:#0f172a;white-space:nowrap}
 .pv-change:hover{background:#eff6ff}
 .pv-paused{background:#f8fafc;border:1px dashed #cbd5e1;border-radius:10px;padding:14px;color:#64748b;font-size:.95rem;line-height:1.6}
 .results-table{max-width:48rem;margin:0 auto}
@@ -86,7 +101,7 @@ body{font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif}
         <div class="dev-notice">האתר בפיתוח: אפשר לחפש קלף ולראות את התמונה שלו, אך הצגת המחירים מושהית זמנית וההערכות טרם אומתו.</div>
         <section class="intro-card">
             <h2>מה זה Poke Value?</h2>
-            <p>Poke Value הוא כלי בבנייה שמטרתו להעריך שווי של קלפי פוקימון מדורגים על בסיס מכירות שהסתיימו ב-eBay. הקלידו שם של קלף, בחרו את שפת הקלף ובחרו את הקלף המדויק מהתוצאות. כשהצגת המחירים תופעל, תוצג הערכת מחיר לכל ציון EAS מ-1 עד 10, יחד עם מספר המכירות שנמצאו. איך ההערכה אמורה להיחשב ומה עדיין לא אומת? <a href="how-it-works.html">קראו את ההסבר המלא</a>.</p>
+            <p>Poke Value הוא כלי בבנייה שמטרתו להעריך שווי של קלפי פוקימון מדורגים על בסיס מכירות שהסתיימו ב-eBay. הקלידו שם של קלף, בחרו את שפת הקלף ובחרו את הקלף המדויק מהתוצאות. כשהצגת המחירים תופעל, יוצג שווי לפי חברות דירוג שונות על בסיס מכירות שהסתיימו, לצד הערכת EAS מסומנת שלנו. איך ההערכה אמורה להיחשב ומה עדיין לא אומת? <a href="how-it-works.html">קראו את ההסבר המלא</a>.</p>
         </section>
         <div class="lang-row">
             <button data-lang="English" class="lang-btn active">English</button>
@@ -116,23 +131,15 @@ body{font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif}
         </div>
 
         <div id="priceArea" class="results-table hidden">
-            <div class="pv-card">
+            <div class="pv-card" id="priceNoteCard">
                 <p id="priceNote"></p>
             </div>
             <div id="results" class="hidden bg-white border border-slate-200 rounded-xl shadow-sm p-6">
                 <h2 id="resultTitle" class="text-2xl font-bold text-slate-800 mb-6 text-center"></h2>
-                <div class="overflow-x-auto">
-                    <table class="w-full text-right border-collapse">
-                        <thead>
-                            <tr class="border-b border-slate-200 bg-slate-50 text-slate-600 font-semibold">
-                                <th class="p-4">ציון דירוג (EAS)</th>
-                                <th class="p-4">מחיר משוקלל (Poke Value)</th>
-                                <th class="p-4 text-center">סה"כ מכירות</th>
-                            </tr>
-                        </thead>
-                        <tbody id="priceTableBody" class="text-slate-700 divide-y divide-slate-100"></tbody>
-                    </table>
-                </div>
+                <div id="priceCells" class="pv-cells"></div>
+                <p id="priceUpdated" class="pv-updated"></p>
+                <h3 id="salesTitle" class="pv-sales-title hidden">מכירות אחרונות</h3>
+                <div id="salesList" class="pv-sales"></div>
             </div>
         </div>
     </main>
@@ -175,8 +182,12 @@ body{font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif}
         const priceArea = document.getElementById('priceArea');
         const resultsDiv = document.getElementById('results');
         const resultTitle = document.getElementById('resultTitle');
-        const tableBody = document.getElementById('priceTableBody');
+        const priceCells = document.getElementById('priceCells');
+        const priceUpdated = document.getElementById('priceUpdated');
+        const salesTitle = document.getElementById('salesTitle');
+        const salesList = document.getElementById('salesList');
         const priceNote = document.getElementById('priceNote');
+        const priceNoteCard = document.getElementById('priceNoteCard');
 
         function showStatus(msg) {
             if (msg) { statusDiv.textContent = msg; statusDiv.classList.remove('hidden'); }
@@ -418,13 +429,15 @@ body{font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif}
             priceArea.classList.remove('hidden');
             if (!SEARCH_ENABLED) {
                 resultsDiv.classList.add('hidden');
-                priceNote.textContent = `הצגת המחירים מושהית זמנית. כשתופעל, יוצגו כאן הערכות שווי ל-${card.name} לכל ציון EAS מ-1 עד 10. ההערכות טרם אומתו.`;
+                priceNoteCard.classList.remove('hidden');
+                priceNote.textContent = `הצגת המחירים מושהית זמנית. כשתופעל, יוצגו כאן שווי של ${card.name} לפי חברות דירוג שונות מנתוני מכירות, לצד הערכת EAS מסומנת. ההערכות טרם אומתו.`;
                 return;
             }
+            priceNoteCard.classList.add('hidden');
             runPriceLookup(card);
         }
 
-        // ===== Price lookup (PAUSED in this build; logic unchanged from v6) =====
+        // ===== Price lookup (PAUSED in this build; target structure for the future price display) =====
 
         // Distinguish real API failure modes instead of showing everything as no-data
         function apiErrorMessage(status) {
@@ -436,54 +449,107 @@ body{font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif}
             return 'שגיאה (' + status + ')';
         }
 
+        // Target API contract (backend TBD after the data-source decision):
+        //   GET /api/prices?card=<exact picked identity>&language=<lang>
+        //   -> { updated_at: ISO string,
+        //        cells: [{ label: string (e.g. "לא מדורג", "PSA 9", "EAS 9"),
+        //                  price: number|null (null = no data, shown as such, never computed),
+        //                  currency: "USD"|"ILS", sales_count: number,
+        //                  is_estimate: boolean (true for our EAS estimate cells) }],
+        //        sales: [{ date: "YYYY-MM-DD", title, price, currency, grade_label, source }] }
+        // Cell set is fully data-driven: no grader list is hardcoded here.
+        // One request per card replaces the old per-grade fanout (was 10 grades
+        // x 5 grader calls = 50 provider requests per uncached card).
         async function runPriceLookup(card) {
             if (!SEARCH_ENABLED) return; // development build: price lookup paused
             const cardQuery = card.priceQuery || searchInput.value.trim(); // exact picked identity, never just the typed text
-            tableBody.innerHTML = '';
-            resultTitle.textContent = `${cardQuery} (${currentLanguage})`;
-
-            for (let grade = 10; grade >= 1; grade--) {
-                const row = document.createElement('tr');
-                row.className = 'hover:bg-slate-50 transition';
-                row.innerHTML = `<td class="p-4 font-bold text-slate-900">EAS ${grade}</td><td id="price-${grade}" class="p-4 text-slate-500">טוען...</td><td id="sales-${grade}" class="p-4 text-center text-slate-500">-</td>`;
-                tableBody.appendChild(row);
-            }
+            resultTitle.textContent = `${card.name} (${currentLanguage})`;
+            priceCells.innerHTML = '';
+            salesList.innerHTML = '';
+            priceUpdated.textContent = '';
+            salesTitle.classList.add('hidden');
             resultsDiv.classList.remove('hidden');
-
-            // Load grades with low concurrency: each grade fetches graders
-            // sequentially server-side, so 2 grades at a time stays under the
-            // free ScraperAPI limit of 5 concurrent connections.
-            const gradeQueue = [];
-            for (let grade = 10; grade >= 1; grade--) gradeQueue.push(grade);
-            const workers = [];
-            for (let i = 0; i < 2; i++) {
-                workers.push((async () => {
-                    let grade;
-                    while ((grade = gradeQueue.shift()) !== undefined) {
-                        await fetchGradePrice(cardQuery, currentLanguage, grade);
-                    }
-                })());
+            const loading = document.createElement('p');
+            loading.className = 'pv-loading';
+            loading.textContent = 'טוען מחירים...';
+            priceCells.appendChild(loading);
+            try {
+                const response = await fetch(`/api/prices?card=${encodeURIComponent(cardQuery)}&language=${encodeURIComponent(currentLanguage)}`);
+                let data = null;
+                try { data = await response.json(); } catch (e) { data = null; }
+                if (!response.ok || !data || !Array.isArray(data.cells)) {
+                    loading.textContent = apiErrorMessage(response.status);
+                    return;
+                }
+                renderPrices(data);
+            } catch {
+                loading.textContent = 'בעיית תקשורת';
             }
-            await Promise.all(workers);
         }
 
-        async function fetchGradePrice(card, language, grade) {
-            const priceTd = document.getElementById(`price-${grade}`);
-            const salesTd = document.getElementById(`sales-${grade}`);
-            try {
-                const response = await fetch(`/api/price?card=${encodeURIComponent(card)}&language=${language}&grade=${grade}`);
-                let data = null;
-                try { data = await response.json(); } catch (e) { data = null; } // 504 etc. may return non-JSON
-                if (response.ok && data && data.poke_value) {
-                    priceTd.innerHTML = `<span class="text-emerald-600 font-extrabold text-lg">$${data.poke_value}</span>`;
-                    salesTd.textContent = data.total_sales || 0;
-                } else {
-                    priceTd.textContent = apiErrorMessage(response.status);
-                    salesTd.textContent = '-';
+        function fmtCellPrice(price, currency) {
+            const n = Number(price);
+            const s = isNaN(n) ? String(price) : n.toLocaleString('he-IL');
+            return currency === 'ILS' ? s + ' ₪' : '$' + s;
+        }
+
+        function renderPrices(data) {
+            priceCells.innerHTML = '';
+            if (!data.cells.length) {
+                const p = document.createElement('p');
+                p.className = 'pv-loading';
+                p.textContent = 'אין נתוני מחיר לקלף הזה כרגע.';
+                priceCells.appendChild(p);
+            }
+            data.cells.forEach(function(cell) {
+                const div = document.createElement('div');
+                div.className = 'pv-cell' + (cell.is_estimate ? ' est' : '');
+                const lbl = document.createElement('div');
+                lbl.className = 'lbl';
+                lbl.textContent = String(cell.label || '');
+                const val = document.createElement('div');
+                const hasPrice = cell.price !== null && cell.price !== undefined && !isNaN(Number(cell.price));
+                val.className = 'val' + (hasPrice ? '' : ' nodata');
+                val.textContent = hasPrice ? fmtCellPrice(cell.price, cell.currency) : 'אין נתונים';
+                const vol = document.createElement('div');
+                vol.className = 'vol';
+                const n = Number(cell.sales_count) || 0;
+                vol.textContent = n > 0 ? n + ' מכירות' : 'אין מכירות';
+                div.appendChild(lbl);
+                div.appendChild(val);
+                div.appendChild(vol);
+                if (cell.is_estimate) {
+                    const badge = document.createElement('span');
+                    badge.className = 'est-badge';
+                    badge.textContent = 'הערכה';
+                    div.appendChild(badge);
                 }
-            } catch {
-                priceTd.textContent = 'בעיית תקשורת';
-                salesTd.textContent = '-';
+                priceCells.appendChild(div);
+            });
+            if (data.updated_at) {
+                const d = new Date(data.updated_at);
+                if (!isNaN(d)) priceUpdated.textContent = 'עודכן: ' + d.toLocaleString('he-IL', {day:'numeric', month:'long', year:'numeric', hour:'2-digit', minute:'2-digit'});
+            }
+            if (Array.isArray(data.sales) && data.sales.length) {
+                salesTitle.classList.remove('hidden');
+                data.sales.forEach(function(s) {
+                    const row = document.createElement('div');
+                    row.className = 'pv-sale';
+                    const d = document.createElement('span');
+                    d.className = 'd';
+                    const dt = new Date(String(s.date || '') + 'T00:00:00');
+                    d.textContent = isNaN(dt) ? '' : dt.toLocaleDateString('he-IL', {day:'numeric', month:'numeric', year:'numeric'});
+                    const t = document.createElement('span');
+                    t.className = 't';
+                    t.textContent = (s.grade_label ? s.grade_label + ' · ' : '') + String(s.title || '');
+                    const p = document.createElement('span');
+                    p.className = 'p';
+                    p.textContent = fmtCellPrice(s.price, s.currency);
+                    row.appendChild(d);
+                    row.appendChild(t);
+                    row.appendChild(p);
+                    salesList.appendChild(row);
+                });
             }
         }
 
