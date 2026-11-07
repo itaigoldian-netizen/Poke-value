@@ -796,18 +796,27 @@ body{font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif}
             return btn;
         }
 
-        function fillLoadedCell(btn, price, totalSales, updatedAt, isRaw, currency, source) {
+        function fillLoadedCell(btn, price, totalSales, updatedAt, isRaw, currency, source, perCurrency) {
             const upd = updatedAt ? new Date(updatedAt) : null;
             const updTxt = upd && !isNaN(upd) ? ' · עודכן ' + upd.toLocaleDateString('he-IL', {day:'numeric', month:'numeric', year:'2-digit'}) : '';
             // Raw values must not read as clean-condition prices: the source
             // has no condition field, so the cell says the condition mix is unknown.
             const condTxt = isRaw ? '<span class="m cond">מצב לא ידוע - מכירות מעורבות</span>' : '';
             // Community (EAS) cells count approved site deal reports, not
-            // external sales, and can be in ILS - the label must say so.
-            const salesTxt = source === 'community'
-                ? (Number(totalSales) === 1 ? ' דיווח אחד באתר' : ' דיווחים באתר')
-                : ' מכירות';
-            btn.innerHTML = `<span class="p">${fmtCellPrice(price, currency || 'USD')}</span><span class="m">${Number(totalSales) || 0}${salesTxt}${updTxt}</span>${condTxt}`;
+            // external sales. Currencies are never converted or mixed: when a
+            // cell has reports in both currencies, both medians are labeled.
+            let priceTxt, salesTxt;
+            const curKeys = perCurrency ? Object.keys(perCurrency) : [];
+            if (source === 'community' && curKeys.length > 1) {
+                priceTxt = curKeys.map(c => fmtCellPrice(perCurrency[c].price, c)).join(' · ');
+                salesTxt = 'דיווחים: ' + curKeys.map(c => perCurrency[c].count + '×' + (c === 'ILS' ? '₪' : '$')).join(' · ');
+            } else {
+                priceTxt = fmtCellPrice(price, currency || 'USD');
+                salesTxt = (Number(totalSales) || 0) + (source === 'community'
+                    ? (Number(totalSales) === 1 ? ' דיווח אחד באתר' : ' דיווחים באתר')
+                    : ' מכירות');
+            }
+            btn.innerHTML = `<span class="p">${priceTxt}</span><span class="m">${salesTxt}${updTxt}</span>${condTxt}`;
             btn.disabled = true; // a current value is already shown; no repeat fetch
         }
 
@@ -826,7 +835,7 @@ body{font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif}
                     if (!c || c.price === null || c.price === undefined || isNaN(Number(c.price))) return;
                     const btn = document.getElementById('cell-' + c.grader + '-' + c.grade);
                     if (btn && btn.disabled === false && btn.querySelector('.cta')) {
-                        fillLoadedCell(btn, c.price, c.total_sales, c.updated_at, c.grader === 'RAW', c.currency, c.source);
+                        fillLoadedCell(btn, c.price, c.total_sales, c.updated_at, c.grader === 'RAW', c.currency, c.source, c.per_currency);
                     }
                 });
             } catch { /* passive read failure: cells stay click-to-load */ }
@@ -846,7 +855,7 @@ body{font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif}
                 let data = null;
                 try { data = await response.json(); } catch (e) { data = null; }
                 if (response.ok && data && data.price !== null && data.price !== undefined && !isNaN(Number(data.price))) {
-                    fillLoadedCell(btn, data.price, data.total_sales, data.updated_at, grader === 'RAW', data.currency, data.source);
+                    fillLoadedCell(btn, data.price, data.total_sales, data.updated_at, grader === 'RAW', data.currency, data.source, data.per_currency);
                     if (Array.isArray(data.sales)) renderSales(data.sales);
                     if (Array.isArray(data.history)) renderHistory(data.history);
                 } else if (response.status === 404) {
