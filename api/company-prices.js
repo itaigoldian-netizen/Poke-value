@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { providerCacheTag } from './_sales-provider.js';
 
 // Passive batch read for the click model (owner-approved Nov7): returns every
 // per-company+grade cached value for the card that is still fresh (<=14 days),
@@ -48,7 +49,7 @@ export default async function handler(req, res) {
   }
 
   const queryKey = card.trim().toLowerCase().replace(/\s+/g, ' ');
-  const keyPrefix = CACHE_KEY_PREFIX + queryKey + '|';
+  const keyPrefix = CACHE_KEY_PREFIX + providerCacheTag() + ':' + queryKey + '|';
 
   try {
     const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);

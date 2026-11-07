@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { fetchSales, providerKeyConfigured, providerCacheTag } from './_sales-provider.js';
 
 // Per-company+grade lookup (owner-approved click model, Nov7): one request
 // serves exactly one cell. A fresh cached value (<=14 days) is served from
@@ -23,15 +24,6 @@ import { createClient } from '@supabase/supabase-js';
 
 const GRADERS = ['PSA', 'BGS', 'CGC', 'TAG']; // no EAS: local deal reports only
 const LANGUAGES = ['English', 'Japanese', 'Chinese', 'Korean'];
-const JUNK_KEYWORDS = /\b(lot|bundle|set of|proxy|custom|reprint|replica|orica|empty slab|slab only|fake)\b/i;
-// EAS stays in this filter: an 'EAS 9' title is still a graded card and must
-// never count toward the raw value, even though EAS is not a lookup column.
-const GRADED_TITLE = /\b(PSA|BGS|CGC|EAS|TAG|SGC|ACE)\s*-?\s*\d/i;
-const LANG_PATTERNS = {
-  Japanese: /\b(japanese|japan|jpn|jp)\b/i,
-  Korean: /\b(korean|korea|kor)\b/i,
-  Chinese: /\b(chinese|china|chn|simplified|traditional)\b/i,
-};
 
 // Cache validity: 14 days (owner request Nov7, was 24h). Responses carry
 // updated_at so the display shows the stored value's age.
@@ -44,13 +36,14 @@ const CACHE_KEY_PREFIX = 'c1:';
 
 function errMsg(err) {
   let m = err && err.message ? err.message : String(err);
-  const key = process.env.SCRAPER_API_KEY;
-  if (key) m = m.split(key).join('[redacted-key]');
+  for (const key of [process.env.SCRAPER_API_KEY, process.env.COMPS_API_KEY]) {
+    if (key) m = m.split(key).join('[redacted-key]');
+  }
   return m.replace(/https?:\/\/\S+/g, '[url]');
 }
 
 function cacheKeyFor(queryKey, grader) {
-  return CACHE_KEY_PREFIX + queryKey + '|' + grader.toLowerCase();
+  return CACHE_KEY_PREFIX + providerCacheTag() + ':' + queryKey + '|' + grader.toLowerCase();
 }
 
 export default async function handler(req, res) {
@@ -86,7 +79,7 @@ export default async function handler(req, res) {
     return res.status(503).json({ error: 'Price lookup is paused' });
   }
 
-  if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY || !process.env.SCRAPER_API_KEY) {
+  if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY || !providerKeyConfigured()) {
     console.error('company price lookup failed: a required environment variable is not set');
     return res.status(500).json({ error: 'Server is not configured' });
   }
@@ -130,7 +123,7 @@ export default async function handler(req, res) {
 
     let sales;
     try {
-      sales = await fetchEbaySoldData(queryKey, graderKey, gradeValue, language);
+      sales = await fetchSales(queryKey, graderKey, gradeValue, language);
     } catch (err) {
       // Message only: never log request URLs, they contain the API key.
       console.error('sales fetch failed for ' + graderKey + ' ' + gradeValue + ': ' + errMsg(err));
@@ -190,64 +183,4 @@ export default async function handler(req, res) {
     console.error('company price lookup failed: ' + errMsg(error));
     return res.status(502).json({ error: 'Server error' });
   }
-}
-
-async function fetchEbaySoldData(cardQuery, grader, grade, language) {
-  // ScraperAPI's structured eBay Search endpoint returns parsed JSON for sold
-  // listings (their officially documented eBay product). eBay's sold view
-  // covers roughly the last 90 days; it has no day-range parameter.
-  const isRaw = grader === 'RAW';
-  let searchString = isRaw ? cardQuery : `${cardQuery} ${grader} ${grade}`;
-  if (language !== 'English') searchString += ` ${language}`;
-
-  const endpoint = 'https://api.scraperapi.com/structured/ebay/search/v2'
-    + '?api_key=' + encodeURIComponent(process.env.SCRAPER_API_KEY)
-    + '&query=' + encodeURIComponent(searchString)
-    + '&show_only=sold_items';
-
-  // Never log endpoint: it contains the API key.
-  const response = await fetch(endpoint);
-  if (!response.ok) {
-    throw new Error('data provider responded with HTTP ' + response.status);
-  }
-
-  let items;
-  try {
-    items = await response.json();
-  } catch (e) {
-    throw new Error('unexpected response format from sales provider');
-  }
-  if (!Array.isArray(items)) {
-    throw new Error('unexpected response format from sales provider');
-  }
-
-  const listings = [];
-  for (const item of items) {
-    const title = String(item.product_title || '').trim();
-    const p = item.item_price;
-    if (!title || !p || JUNK_KEYWORDS.test(title)) continue;
-    // A from/to range is not a single sale; only fixed prices count.
-    if (typeof p.value !== 'number') continue;
-    if (p.currency !== 'USD') continue;        // dollar-denominated prices only
-
-    if (language === 'English') {
-      if (Object.values(LANG_PATTERNS).some(regex => regex.test(title))) continue;
-    } else {
-      if (!LANG_PATTERNS[language].test(title)) continue;
-    }
-
-    if (isRaw) {
-      // Ungraded only: any graded mention disqualifies the sale from the raw value.
-      if (GRADED_TITLE.test(title)) continue;
-    } else {
-      const exactGradeRegex = new RegExp(`\\b${grader}\\s*-?\\s*${grade}(?!\\d|\\.\\d)`, 'i');
-      if (!exactGradeRegex.test(title)) continue;
-    }
-
-    if (p.value > 0) {
-      listings.push({ price: p.value });
-    }
-  }
-
-  return listings.slice(0, 10);
 }
