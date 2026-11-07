@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>עסקאות הקהילה - Poke Value</title>
+    <title>דיווח עסקאות - Poke Value</title>
     <link rel="icon" type="image/jpeg" href="/favicon.png.jpeg">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
@@ -30,6 +30,8 @@ input:focus,select:focus{outline:none;border-color:#2563eb;box-shadow:0 0 0 3px 
 .row>div{flex:1;min-width:120px}
 button{background:#2563eb;color:#fff;border:none;padding:10px 22px;border-radius:10px;font-weight:600;font-size:1rem;cursor:pointer;transition:background .15s;margin-top:14px}
 button:hover{background:#1d4ed8}
+button.link{background:#fff;border:1px solid #2563eb;color:#2563eb;text-decoration:none}
+button.link:hover{background:#eff6ff}
 .msg{margin-top:12px;font-weight:600}
 .msg.err{color:#b91c1c}
 .msg.ok{color:#047857}
@@ -42,6 +44,19 @@ button:hover{background:#1d4ed8}
 .badge.grade{background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe}
 .empty-state{color:#64748b;font-style:italic}
 .hidden{display:none}
+.pick-grid{display:flex;flex-wrap:wrap;gap:10px;margin-top:12px}
+.pick-card{background:#fff;border:1px solid #cbd5e1;border-radius:10px;padding:8px;cursor:pointer;width:110px;text-align:center;margin-top:0}
+.pick-card:hover{border-color:#2563eb}
+.pick-card img{width:100%;border-radius:6px}
+.pick-card .nm{display:block;font-size:.8rem;font-weight:600;color:#1e293b;margin-top:4px;line-height:1.3}
+.pick-card .st{display:block;font-size:.7rem;color:#64748b;line-height:1.3}
+.sel-card{display:flex;gap:14px;align-items:center;border:1px solid #2563eb;background:#eff6ff;border-radius:10px;padding:10px 14px;margin-top:12px}
+.sel-card img{width:64px;border-radius:6px}
+.sel-card .nm{font-weight:700;color:#1e293b}
+.sel-card .st{font-size:.85rem;color:#475569}
+.sel-card button{margin-top:0;margin-inline-start:auto}
+.noimg{width:100%;aspect-ratio:63/88;background:#e2e8f0;border-radius:6px;display:flex;align-items:center;justify-content:center;color:#64748b;font-size:.7rem;text-align:center;padding:4px}
+.sel-card .noimg{width:64px}
     </style>
 </head>
 <body>
@@ -51,7 +66,7 @@ button:hover{background:#1d4ed8}
             <nav>
                 <a href="index.html">חיפוש</a>
                 <a href="news.html">חדשות</a>
-                <a href="deals.html">עסקאות</a>
+                <a href="deals.html">דיווח עסקאות</a>
                 <a href="how-it-works.html">איך זה עובד</a>
                 <a href="about.html">אודות</a>
                 <a href="privacy.html">פרטיות</a>
@@ -65,10 +80,10 @@ button:hover{background:#1d4ed8}
             <p><strong>ההגדרות עוד לא הוזנו.</strong> כדי להפעיל את העמוד צריך להזין בקוד שני ערכים ציבוריים מה-Supabase (Project URL ו-anon public key) - ההוראות המלאות במדריך ההתקנה.</p>
         </div>
         <section>
-            <h2>עסקאות הקהילה</h2>
+            <h2>דיווח עסקאות</h2>
             <p>כאן חברי הקהילה מדווחים על עסקאות שעשו בקלפים: מה קנו או מכרו, באיזה מחיר ומתי. רוצה לדווח על עסקה שלך? מלא את הטופס למטה.</p>
             <div class="notice">
-                <p><strong>שימו לב:</strong> הדיווחים כאן נשלחים על ידי משתמשים ומתפרסמים לאחר אישור בעל האתר, אבל אין לנו אפשרות לאמת שהעסקה התרחשה בפועל. הם מוצגים כמידע קהילתי בלבד ואינם משפיעים על הערכות המחיר באתר.</p>
+                <p><strong>שימו לב:</strong> הדיווחים כאן נשלחים על ידי משתמשים ומתפרסמים לאחר אישור בעל האתר, אבל אין לנו אפשרות לאמת שהעסקה התרחשה בפועל. דיווחים מאושרים עם זיהוי קלף מדויק עשויים לשמש בעתיד בחישוב הערכות השווי באתר, בהתאם לשיטה שתפורסם בעמוד "איך זה עובד".</p>
             </div>
         </section>
         <section>
@@ -79,8 +94,41 @@ button:hover{background:#1d4ed8}
         </section>
         <section>
             <h2>דיווח על עסקה שעשית</h2>
-            <label for="card-name">שם הקלף</label>
-            <input id="card-name" type="text" maxlength="120" placeholder="לדוגמה: Charizard Base Set">
+            <div class="row">
+                <div>
+                    <label for="card-search">שם הקלף</label>
+                    <input id="card-search" type="text" maxlength="120" placeholder="לדוגמה: Charizard">
+                </div>
+                <div>
+                    <label for="card-lang">שפת הקלף</label>
+                    <select id="card-lang">
+                        <option value="English">אנגלית</option>
+                        <option value="Japanese">יפנית</option>
+                        <option value="Chinese">סינית</option>
+                        <option value="Korean">קוריאנית</option>
+                        <option value="other">אחרת</option>
+                    </select>
+                </div>
+            </div>
+            <div id="search-row">
+                <button id="search-btn" type="button">חיפוש הקלף</button>
+            </div>
+            <p id="search-status" class="msg"></p>
+            <div id="pick-grid" class="pick-grid hidden"></div>
+            <div id="sel-card" class="sel-card hidden">
+                <div id="sel-img"></div>
+                <div>
+                    <div class="nm" id="sel-name"></div>
+                    <div class="st" id="sel-set"></div>
+                </div>
+                <button id="change-card" type="button" class="link">החלפת קלף</button>
+            </div>
+            <div id="manual-wrap" class="hidden">
+                <label for="card-name-manual">שם הקלף (רשמה ידנית)</label>
+                <input id="card-name-manual" type="text" maxlength="120" placeholder="לדוגמה: Charizard Base Set 4/102">
+                <p class="meta" style="color:#64748b;font-size:.85rem">דיווח ללא זיהוי מדויק של הקלף יוצג באתר אחרי אישור, אבל לא ייכלל בחישובי השווי.</p>
+            </div>
+            <p style="margin-top:10px"><button id="manual-toggle" type="button" class="link">לא מוצאים את הקלף? דיווח ידני</button></p>
             <div class="row">
                 <div>
                     <label for="direction">מה עשית?</label>
@@ -133,7 +181,7 @@ button:hover{background:#1d4ed8}
         <nav>
             <a href="index.html">חיפוש</a>
             <a href="news.html">חדשות</a>
-            <a href="deals.html">עסקאות</a>
+            <a href="deals.html">דיווח עסקאות</a>
             <a href="how-it-works.html">איך זה עובד</a>
             <a href="about.html">אודות</a>
             <a href="privacy.html">פרטיות</a>
@@ -163,6 +211,7 @@ button:hover{background:#1d4ed8}
         var sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
         var GRADER_NAMES = {PSA:'PSA', BGS:'BGS', CGC:'CGC', SGC:'SGC', other:'דירוג'};
+        var LANG_NAMES = {English:'אנגלית', Japanese:'יפנית', Chinese:'סינית', Korean:'קוריאנית', other:'אחרת'};
 
         function fmtDate(iso){
             var d = new Date(iso + 'T00:00:00');
@@ -176,7 +225,7 @@ button:hover{background:#1d4ed8}
         }
 
         function loadTrades(){
-            sb.from('community_trades').select('card_name,direction,price,currency,trade_date,grader,grade,reporter')
+            sb.from('community_trades').select('card_name,card_set_name,card_number,language,direction,price,currency,trade_date,grader,grade,reporter')
                 .eq('status', 'approved')
                 .order('trade_date', {ascending:false})
                 .order('created_at', {ascending:false})
@@ -209,6 +258,8 @@ button:hover{background:#1d4ed8}
                         var parts = ['במחיר ' + fmtPrice(t.price, t.currency)];
                         var d = fmtDate(t.trade_date);
                         if (d) parts.push('ב-' + d);
+                        if (t.card_set_name || t.card_number) parts.push([t.card_set_name, t.card_number].filter(Boolean).join(' · '));
+                        if (t.language) parts.push('שפה: ' + (LANG_NAMES[t.language] || t.language));
                         parts.push(t.reporter ? 'דווח על ידי ' + t.reporter : 'דיווח אנונימי');
                         meta.textContent = parts.join(' · ');
                         div.appendChild(h);
@@ -218,12 +269,156 @@ button:hover{background:#1d4ed8}
                 });
         }
 
+        // ===== בחירת הקלף המדויק ממאגר TCGdex (אותו מאגר כמו בעמוד החיפוש) =====
+        var TCGDEX_LANG = { English: 'en', Japanese: 'ja', Chinese: 'zh-cn', Korean: 'ko' };
+        var TCGDEX_API = 'https://api.tcgdex.net/v2';
+        var pickedCard = null;   // {tcg_id, name, set_id, set_name, number}
+        var manualMode = false;
+        var searchToken = 0;
+
+        function setIdOf(card){ return (card.id || '').split('-').slice(0, -1).join('-'); }
+
+        function safeImgUrl(card, quality){
+            if (typeof card.image !== 'string') return null;
+            if (!card.image.startsWith('https://assets.tcgdex.net/')) return null;
+            return card.image + '/' + quality + '.webp';
+        }
+
+        function buildImgEl(card, quality){
+            var u = safeImgUrl(card, quality);
+            var ph = document.createElement('div');
+            ph.className = 'noimg';
+            ph.textContent = 'אין תמונה';
+            if (!u) return ph;
+            var img = document.createElement('img');
+            img.src = u;
+            img.alt = String(card.name || '');
+            img.loading = 'lazy';
+            img.addEventListener('error', function(){ img.replaceWith(ph); });
+            return img;
+        }
+
+        function setStatus(t){
+            var el = document.getElementById('search-status');
+            el.textContent = t || '';
+            el.className = 'msg';
+        }
+
+        function clearPick(){
+            pickedCard = null;
+            hide('sel-card');
+            document.getElementById('pick-grid').innerHTML = '';
+            hide('pick-grid');
+        }
+
+        function pickCard(card, setName){
+            pickedCard = {
+                tcg_id: card.id,
+                name: card.name,
+                set_id: setIdOf(card),
+                set_name: setName || setIdOf(card),
+                number: card.localId || null
+            };
+            document.getElementById('pick-grid').innerHTML = '';
+            hide('pick-grid');
+            setStatus('');
+            var imgWrap = document.getElementById('sel-img');
+            imgWrap.innerHTML = '';
+            imgWrap.appendChild(buildImgEl(card, 'low'));
+            document.getElementById('sel-name').textContent = String(card.name || '');
+            document.getElementById('sel-set').textContent = pickedCard.set_name + (pickedCard.number ? ' · קלף מספר ' + pickedCard.number : '');
+            show('sel-card');
+            manualMode = false;
+            hide('manual-wrap');
+        }
+
+        document.getElementById('search-btn').addEventListener('click', function(){
+            var q = document.getElementById('card-search').value.trim();
+            var lang = document.getElementById('card-lang').value;
+            if (!q){ setStatus('כתבו את שם הקלף ולחצו חיפוש.'); return; }
+            if (!TCGDEX_LANG[lang]){
+                setStatus('בשפה "אחרת" אין חיפוש במאגר - השתמשו בדיווח הידני.');
+                return;
+            }
+            clearPick();
+            var token = ++searchToken;
+            setStatus('מחפש קלפים...');
+            fetch(TCGDEX_API + '/' + TCGDEX_LANG[lang] + '/cards?name=' + encodeURIComponent(q))
+                .then(function(r){
+                    if (!r.ok) throw new Error('search failed');
+                    return r.json();
+                })
+                .then(function(cards){
+                    if (token !== searchToken) return;
+                    if (!cards.length && q.indexOf(' ') >= 0){
+                        q = q.split(/\s+/)[0];
+                        return fetch(TCGDEX_API + '/' + TCGDEX_LANG[lang] + '/cards?name=' + encodeURIComponent(q))
+                            .then(function(r2){ return r2.ok ? r2.json() : []; });
+                    }
+                    return cards;
+                })
+                .then(function(cards){
+                    if (token !== searchToken) return;
+                    if (!cards || !cards.length){
+                        setStatus('לא נמצאו קלפים בשם הזה. נסו שם אחר, שפה אחרת, או דיווח ידני.');
+                        return;
+                    }
+                    setStatus(cards.length === 1 ? 'נמצא קלף אחד:' : 'נמצאו ' + cards.length + ' קלפים - בחרו את המדויק:');
+                    return fetch(TCGDEX_API + '/' + TCGDEX_LANG[lang] + '/sets')
+                        .then(function(r3){ return r3.ok ? r3.json() : []; })
+                        .then(function(sets){
+                            if (token !== searchToken) return;
+                            var names = {};
+                            (sets || []).forEach(function(s){ names[s.id] = s.name; });
+                            var grid = document.getElementById('pick-grid');
+                            grid.innerHTML = '';
+                            cards.slice(0, 24).forEach(function(card){
+                                var b = document.createElement('button');
+                                b.type = 'button';
+                                b.className = 'pick-card';
+                                b.appendChild(buildImgEl(card, 'low'));
+                                var nm = document.createElement('span');
+                                nm.className = 'nm';
+                                nm.textContent = String(card.name || '');
+                                var st = document.createElement('span');
+                                st.className = 'st';
+                                st.textContent = (names[setIdOf(card)] || setIdOf(card)) + (card.localId ? ' · ' + card.localId : '');
+                                b.appendChild(nm);
+                                b.appendChild(st);
+                                b.addEventListener('click', function(){ pickCard(card, names[setIdOf(card)]); });
+                                grid.appendChild(b);
+                            });
+                            show('pick-grid');
+                        });
+                })
+                .catch(function(){
+                    if (token !== searchToken) return;
+                    setStatus('בעיית תקשורת מול מאגר הקלפים, נסו שוב מאוחר יותר.');
+                });
+        });
+
+        document.getElementById('change-card').addEventListener('click', function(){
+            clearPick();
+            document.getElementById('card-search').focus();
+        });
+
+        document.getElementById('manual-toggle').addEventListener('click', function(){
+            manualMode = !manualMode;
+            if (manualMode){
+                clearPick();
+                show('manual-wrap');
+                this.textContent = 'חזרה לחיפוש במאגר הקלפים';
+            } else {
+                hide('manual-wrap');
+                this.textContent = 'לא מוצאים את הקלף? דיווח ידני';
+            }
+        });
+
         document.getElementById('grader').addEventListener('change', function(){
             if (this.value){ show('grade-wrap'); } else { hide('grade-wrap'); }
         });
 
         document.getElementById('submit-btn').addEventListener('click', function(){
-            var cardName = document.getElementById('card-name').value.trim();
             var direction = document.getElementById('direction').value;
             var price = Number(document.getElementById('price').value);
             var currency = document.getElementById('currency').value;
@@ -231,8 +426,22 @@ button:hover{background:#1d4ed8}
             var grader = document.getElementById('grader').value;
             var grade = document.getElementById('grade').value.trim();
             var reporter = document.getElementById('reporter').value.trim();
+            var language = document.getElementById('card-lang').value;
             var msgEl = document.getElementById('form-msg');
             function err(t){ msgEl.textContent = t; msgEl.className = 'msg err'; }
+
+            var cardName, tcgId = null, setId = null, setName = null, cardNumber = null;
+            if (manualMode){
+                cardName = document.getElementById('card-name-manual').value.trim();
+            } else if (pickedCard){
+                cardName = pickedCard.name;
+                tcgId = pickedCard.tcg_id;
+                setId = pickedCard.set_id;
+                setName = pickedCard.set_name;
+                cardNumber = pickedCard.number;
+            } else {
+                err('חובה לחפש ולבחור את הקלף המדויק, או לעבור לדיווח ידני.'); return;
+            }
 
             if (!cardName){ err('חובה למלא את שם הקלף.'); return; }
             if (!price || price <= 0){ err('חובה למלא מחיר חיובי.'); return; }
@@ -244,6 +453,11 @@ button:hover{background:#1d4ed8}
             msgEl.className = 'msg ok';
             sb.from('community_trades').insert({
                 card_name: cardName,
+                tcg_id: tcgId,
+                card_set: setId,
+                card_set_name: setName,
+                card_number: cardNumber,
+                language: language,
                 direction: direction,
                 price: price,
                 currency: currency,
@@ -255,7 +469,9 @@ button:hover{background:#1d4ed8}
             }).then(function(res){
                 if (res.error){ err('השליחה נכשלה: ' + res.error.message); return; }
                 msgEl.textContent = 'הדיווח נשלח! הוא יופיע באתר לאחר אישור בעל האתר.';
-                document.getElementById('card-name').value = '';
+                clearPick();
+                document.getElementById('card-search').value = '';
+                document.getElementById('card-name-manual').value = '';
                 document.getElementById('price').value = '';
                 document.getElementById('trade-date').value = '';
                 document.getElementById('grade').value = '';
