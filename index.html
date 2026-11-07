@@ -21,6 +21,8 @@ body{font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif}
 .pv-search input:focus{outline:none;border-color:#2563eb;box-shadow:0 0 0 3px rgba(37,99,235,.15)}
 .pv-search button{background:#2563eb;color:#fff;border:none;padding:10px 22px;border-radius:10px;font-weight:600;font-size:1rem;cursor:pointer;transition:background .15s}
 .pv-search button:hover{background:#1d4ed8}
+.pv-newslink{align-self:center;background:#fff;border:1px solid #2563eb;color:#2563eb;padding:10px 22px;border-radius:10px;font-weight:600;font-size:1rem;text-decoration:none;transition:background .15s;white-space:nowrap}
+.pv-newslink:hover{background:#eff6ff}
 @media(min-width:768px){.pv-header-inner{flex-direction:row;align-items:center;justify-content:space-between}.pv-logo{text-align:right}.pv-search{margin:0}}
 .pv-main{max-width:64rem;margin:0 auto;padding:24px 16px 48px}
 .dev-notice{background:#fef3c7;border:1px solid #f59e0b;border-radius:12px;padding:14px 20px;margin:0 auto 20px;max-width:48rem;color:#92400e;font-weight:600;line-height:1.6}
@@ -29,7 +31,8 @@ body{font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif}
 .intro-card p,.pv-card p{color:#475569;line-height:1.7;margin:0}
 .intro-card a{color:#2563eb;text-decoration:underline}
 .lang-row{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;margin-bottom:24px}
-.lang-btn{padding:8px 16px;border-radius:8px;font-weight:500;cursor:pointer;border:1px solid #cbd5e1;background:#fff;color:#334155;transition:all .15s}
+.lang-btn{padding:10px 18px;border-radius:10px;font-weight:500;cursor:pointer;border:1px solid #2563eb;background:#fff;color:#2563eb;transition:all .15s}
+.lang-btn:hover{background:#eff6ff}
 .lang-btn.active{background:#2563eb;color:#fff;border-color:#2563eb}
 .pv-status{text-align:center;color:#64748b;padding:24px 0}
 .pv-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:14px;max-width:64rem;margin:0 auto 24px}
@@ -44,7 +47,7 @@ body{font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif}
 .pv-tools{max-width:64rem;margin:0 auto 14px;display:flex;gap:8px;flex-wrap:wrap}
 .pv-tools input{flex:1;min-width:200px;padding:8px 12px;border:1px solid #cbd5e1;border-radius:8px;font-size:.95rem;text-align:right}
 .pv-tools input:focus{outline:none;border-color:#2563eb;box-shadow:0 0 0 3px rgba(37,99,235,.15)}
-.pv-more{display:block;margin:0 auto 24px;background:#fff;border:1px solid #2563eb;color:#2563eb;padding:10px 24px;border-radius:10px;font-weight:600;cursor:pointer}
+.pv-more{display:block;margin:0 auto 24px;background:#fff;border:1px solid #2563eb;color:#2563eb;padding:10px 22px;border-radius:10px;font-weight:600;cursor:pointer;transition:background .15s}
 .pv-more:hover{background:#eff6ff}
 .pv-broaden{background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:10px 16px;max-width:48rem;margin:0 auto 16px;color:#1e40af;font-size:.9rem;line-height:1.6}
 .pv-variant{color:#94a3b8;font-size:.8rem;line-height:1.5;margin-top:10px}
@@ -54,8 +57,8 @@ body{font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif}
 .pv-selected .info{flex:1}
 .pv-selected .info h2{font-size:1.35rem;font-weight:800;color:#0f172a;margin:0 0 6px}
 .pv-selected .info .set{color:#64748b;margin:0 0 12px}
-.pv-change{background:none;border:1px solid #cbd5e1;border-radius:8px;color:#2563eb;padding:6px 14px;cursor:pointer;font-size:.9rem}
-.pv-change:hover{border-color:#2563eb}
+.pv-change{background:#fff;border:1px solid #2563eb;border-radius:10px;color:#2563eb;padding:10px 22px;cursor:pointer;font-size:1rem;font-weight:600;transition:background .15s}
+.pv-change:hover{background:#eff6ff}
 .pv-paused{background:#f8fafc;border:1px dashed #cbd5e1;border-radius:10px;padding:14px;color:#64748b;font-size:.95rem;line-height:1.6}
 .results-table{max-width:48rem;margin:0 auto}
 .site-footer{background:#fff;border-top:1px solid #e2e8f0;padding:24px 16px;margin-top:48px;text-align:center}
@@ -75,6 +78,8 @@ body{font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif}
                 <input id="cardSearch" type="text" placeholder="חפש קלף (למשל: Charizard Base Set)...">
                 <button id="searchBtn">חיפוש</button>
             </div>
+            <a class="pv-newslink" href="news.html">חדשות</a>
+            <a class="pv-newslink" href="deals.html">עסקאות</a>
         </div>
     </header>
     <main class="pv-main">
@@ -135,6 +140,7 @@ body{font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif}
         <nav>
             <a href="index.html">חיפוש</a>
             <a href="news.html">חדשות</a>
+            <a href="deals.html">עסקאות</a>
             <a href="how-it-works.html">איך זה עובד</a>
             <a href="about.html">אודות</a>
             <a href="privacy.html">פרטיות</a>
