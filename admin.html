@@ -264,6 +264,10 @@ button.small{padding:8px 18px;font-size:.95rem;margin:14px 12px 0 0}
             return div;
         }
 
+        // מחיקת דיווח (דחייה בממתינים / מחיקה במאושרים) מסירה את הרשומה לחלוטין מה-DB.
+        // נכון להיום שום חישוב מחיר או היסטוריה לא נשען על community_trades (שיטת v3 מושהית),
+        // ולכן המחיקה בטוחה. אם בעתיד יתווסף חישוב שמשתמש בדיווחים, חובה שהמחיקה תוציא את
+        // הדיווח גם מהתוצאות והמטמון הנגזרים - אסור להשאיר אותו נספר.
         function loadTrades(){
             sb.from('community_trades').select('id,card_name,tcg_id,card_set_name,card_number,language,direction,price,currency,trade_date,grader,grade,reporter,status')
                 .order('created_at', {ascending:false})
