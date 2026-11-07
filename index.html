@@ -59,6 +59,9 @@ body{font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif}
 .pv-selected .info .set{color:#64748b;margin:0 0 12px}
 .pv-change{background:#fff;border:1px solid #2563eb;border-radius:10px;color:#2563eb;padding:10px 22px;cursor:pointer;font-size:1rem;font-weight:600;transition:background .15s}
 .pv-matrix-wrap{overflow-x:auto;margin-bottom:8px}
+.pv-raw-row{display:flex;gap:10px;align-items:stretch;margin-bottom:8px}
+.pv-raw-row .pv-grade-lbl{position:static;box-shadow:none;display:flex;align-items:center}
+.pv-raw-row .pv-gcell{flex:1}
 .pv-matrix{border-collapse:collapse;width:100%;min-width:560px}
 .pv-matrix th{font-size:.85rem;font-weight:700;color:#475569;padding:6px 4px;border-bottom:1px solid #e2e8f0;text-align:center}
 .pv-matrix td{padding:3px;border-bottom:1px solid #f1f5f9;text-align:center}
@@ -147,6 +150,7 @@ body{font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif}
             </div>
             <div id="results" class="hidden bg-white border border-slate-200 rounded-xl shadow-sm p-6">
                 <h2 id="resultTitle" class="text-2xl font-bold text-slate-800 mb-6 text-center"></h2>
+                <div class="pv-raw-row" id="rawRow"></div>
                 <div class="pv-matrix-wrap" id="matrixWrap">
                     <table class="pv-matrix">
                         <thead id="matrixHead"></thead>
@@ -542,17 +546,15 @@ body{font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif}
             });
             matrixHead.appendChild(headRow);
 
-            // Raw row first: ungraded value from ungraded sales only.
-            const rawRow = document.createElement('tr');
-            const rawLbl = document.createElement('td');
+            // Raw sits outside the scrolling grid so its price/date/condition
+            // are always fully visible at any horizontal scroll position.
+            const rawRowEl = document.getElementById('rawRow');
+            rawRowEl.innerHTML = '';
+            const rawLbl = document.createElement('span');
             rawLbl.className = 'pv-grade-lbl';
             rawLbl.textContent = 'לא מדורג';
-            rawRow.appendChild(rawLbl);
-            const rawTd = document.createElement('td');
-            rawTd.colSpan = MATRIX_GRADERS.length;
-            rawTd.appendChild(makeCell(cardQuery, 'RAW', 0));
-            rawRow.appendChild(rawTd);
-            matrixBody.appendChild(rawRow);
+            rawRowEl.appendChild(rawLbl);
+            rawRowEl.appendChild(makeCell(cardQuery, 'RAW', 0));
 
             for (let grade = 10; grade >= 1; grade--) {
                 const tr = document.createElement('tr');
