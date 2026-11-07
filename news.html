@@ -35,6 +35,7 @@ footer .credit{color:#64748b;font-size:0.85rem;max-width:40rem;margin:8px auto 0
 .news-item .read{color:#2563eb;font-size:0.85rem;font-weight:600}
 .news-note{color:#64748b;font-size:0.85rem;margin-top:12px}
 .news-error{color:#713f12}
+.hidden{display:none}
     </style>
 </head>
 <body>
@@ -60,6 +61,10 @@ footer .credit{color:#64748b;font-size:0.85rem;max-width:40rem;margin:8px auto 0
             כתבות מתווספות דרך עמוד הניהול admin.html (עם האימייל והסיסמה
             שהוגדרו ב-Supabase). אין צורך לערוך את הקובץ הזה כדי לפרסם.
             -->
+            <div id="article-push-box" class="hidden" style="margin-bottom:1rem; padding:0.75rem; border:1px solid var(--border,#ddd); border-radius:8px;">
+                <p id="article-push-msg" style="margin:0 0 0.5rem;">רוצים לדעת ראשונים כשעולה כתבה חדשה?</p>
+                <button id="article-push-btn" class="btn">הפעלת התראות על כתבות חדשות</button>
+            </div>
             <div id="own-articles"></div>
             <p id="empty-state" class="empty-state">עדיין לא פורסמו כתבות. כשתצא הכתבה הראשונה שלנו, היא תופיע כאן.</p>
         </section>
@@ -140,6 +145,74 @@ footer .credit{color:#64748b;font-size:0.85rem;max-width:40rem;margin:8px auto 0
                     box.appendChild(art);
                 });
             });
+
+        // הרשמה voluntarily להתראות על כתבות חדשות (Web Push, ללא עלות).
+        // ההרשמה עצמה היא ההסכמה: רק מי שלוחץ ומאשר התראות בדפדפן נרשם.
+        function urlBase64ToUint8Array(base64String){
+            var padding = '='.repeat((4 - base64String.length % 4) % 4);
+            var base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+            var rawData = atob(base64);
+            var outputArray = new Uint8Array(rawData.length);
+            for (var i = 0; i < rawData.length; ++i){ outputArray[i] = rawData.charCodeAt(i); }
+            return outputArray;
+        }
+
+        function articlePushMsg(text){
+            document.getElementById('article-push-msg').textContent = text;
+        }
+
+        (function initArticlePush(){
+            var box = document.getElementById('article-push-box');
+            var btn = document.getElementById('article-push-btn');
+            if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)){
+                return; // דפדפן ללא תמיכה - הקופסה נשארת מוסתרת
+            }
+            navigator.serviceWorker.register('/sw.js').then(function(reg){
+                box.classList.remove('hidden');
+                return reg.pushManager.getSubscription().then(function(sub){
+                    if (sub && Notification.permission === 'granted'){
+                        btn.classList.add('hidden');
+                        articlePushMsg('ההתראות על כתבות חדשות פעילות במכשיר זה.');
+                    }
+                });
+            }).catch(function(){ /* נשאר מוסתר */ });
+
+            btn.addEventListener('click', function(){
+                btn.disabled = true;
+                articlePushMsg('מפעיל...');
+                navigator.serviceWorker.ready.then(function(reg){
+                    return fetch('/api/push-subscribe').then(function(r){
+                        if (!r.ok) throw new Error('push not configured');
+                        return r.json();
+                    }).then(function(cfg){
+                        return Notification.requestPermission().then(function(permission){
+                            if (permission !== 'granted') throw new Error('denied');
+                            return reg.pushManager.subscribe({
+                                userVisibleOnly: true,
+                                applicationServerKey: urlBase64ToUint8Array(cfg.publicKey)
+                            });
+                        });
+                    });
+                }).then(function(sub){
+                    return fetch('/api/push-subscribe', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ subscription: sub, audience: 'articles' })
+                    });
+                }).then(function(r){
+                    if (!r.ok) throw new Error('save failed');
+                    btn.classList.add('hidden');
+                    articlePushMsg('נרשמת! כשתעלה כתבה חדשה תקבלו התראה.');
+                }).catch(function(e){
+                    btn.disabled = false;
+                    if (e && e.message === 'denied'){
+                        articlePushMsg('ההתראות נחסמו בדפדפן. יש לאשר התראות בהגדרות הדפדפן ולנסות שוב.');
+                    } else {
+                        articlePushMsg('ההרשמה נכשלה. נסו שוב.');
+                    }
+                });
+            });
+        })();
     })();
     </script>
 </body>

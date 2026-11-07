@@ -11,13 +11,20 @@ import { createClient } from '@supabase/supabase-js';
 //     arbitrary/private hosts) and the subscription count is capped.
 //
 //   GET  /api/push-subscribe -> { publicKey } (VAPID public key is public by
-//                               design; the admin page fetches it instead of
+//                               design; the pages fetch it instead of
 //                               hardcoding it in the repo)
 //   POST /api/push-subscribe Authorization: Bearer <owner access token>
-//        { subscription } -> upsert by endpoint
+//        { subscription } -> upsert by endpoint (owner trade-report alerts)
+//   POST /api/push-subscribe { subscription, audience: 'articles' } -> public
+//        article-alerts opt-in (owner request Nov7 19:13: visitors who choose
+//        to subscribe get a push when a new article is published). No login -
+//        the subscription itself is the consent; rows land in the separate
+//        article_subscribers table, never in the owner's alert list. The two
+//        audiences stay fully distinct.
 
 const MAX_ENDPOINT_LEN = 2000;
 const MAX_SUBSCRIPTIONS = 10; // the owner has a phone and maybe a desktop
+const MAX_ARTICLE_SUBSCRIPTIONS = 5000; // public opt-in cap, anti-spam bound
 
 // Known browser push services. Chrome/Android: FCM. Firefox: Mozilla autopush.
 // Safari: Apple. Windows/Edge legacy: WNS. Anything else is refused, so a
@@ -79,9 +86,12 @@ export default async function handler(req, res) {
   try {
     const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 
-    const owner = await ownerFromToken(req);
-    if (!owner) {
-      return res.status(403).json({ error: 'Only the site owner can enable notifications' });
+    const isArticleAudience = req.body && req.body.audience === 'articles';
+    if (!isArticleAudience) {
+      const owner = await ownerFromToken(req);
+      if (!owner) {
+        return res.status(403).json({ error: 'Only the site owner can enable notifications' });
+      }
     }
 
     const sub = req.body && req.body.subscription;
@@ -93,20 +103,23 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Invalid subscription' });
     }
 
+    const table = isArticleAudience ? 'article_subscribers' : 'push_subscriptions';
+    const cap = isArticleAudience ? MAX_ARTICLE_SUBSCRIPTIONS : MAX_SUBSCRIPTIONS;
+
     const { count } = await supabase
-      .from('push_subscriptions')
+      .from(table)
       .select('*', { count: 'exact', head: true });
     const { data: existing } = await supabase
-      .from('push_subscriptions')
+      .from(table)
       .select('endpoint')
       .eq('endpoint', endpoint)
       .single();
-    if (!existing && typeof count === 'number' && count >= MAX_SUBSCRIPTIONS) {
+    if (!existing && typeof count === 'number' && count >= cap) {
       return res.status(409).json({ error: 'Subscription limit reached' });
     }
 
     const { error } = await supabase
-      .from('push_subscriptions')
+      .from(table)
       .upsert({ endpoint, keys: { p256dh: keys.p256dh, auth: keys.auth } }, { onConflict: 'endpoint' });
     if (error) {
       console.error('push subscribe failed: ' + (error.message || 'unknown'));

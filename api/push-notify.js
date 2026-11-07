@@ -1,15 +1,19 @@
 import { createClient } from '@supabase/supabase-js';
 import webpush from 'web-push';
 
-// Pending trade report -> push notification to the site owner's phone
-// (owner request Nov7 17:41, zero-cost: Web Push + VAPID, no paid provider).
+// Web Push dispatcher (zero-cost: Web Push + VAPID, no paid provider).
 //
-// Trigger: a Supabase Database Webhook on community_trades INSERT calls this
-// endpoint. The shared secret in x-webhook-secret (set in the webhook config
-// and in Vercel env as PUSH_WEBHOOK_SECRET) authenticates the call; without
-// it anyone could spam the owner's phone.
+// Two Supabase Database Webhooks call this endpoint, kept fully distinct:
+//   * community_trades INSERT (status pending) -> owner phone alert that a
+//     trade report waits for approval (owner request Nov7 17:41), sent only
+//     to push_subscriptions (owner devices).
+//   * articles INSERT -> a new article is live; notify article_subscribers,
+//     the visitors who opted in on news.html (owner request Nov7 19:13).
+// The shared secret in x-webhook-secret (set in both webhook configs and in
+// Vercel env as PUSH_WEBHOOK_SECRET) authenticates the call; without it
+// anyone could spam the owner and the subscribers.
 //
-// Zero-cost behavior: one function invocation per new report, one push per
+// Zero-cost behavior: one function invocation per new row, one push per
 // stored subscription. Dead subscriptions (404/410 from the push service)
 // are deleted so sends stay bounded.
 
@@ -26,9 +30,32 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'Server is not configured' });
   }
 
-  const record = req.body && req.body.record;
-  if (!record || record.status !== 'pending') {
-    return res.status(200).json({ skipped: true });
+  const body = req.body || {};
+  const table = body.table;
+  const record = body.record;
+
+  let targetTable, payload;
+  if (table === 'articles') {
+    if (!record || !record.title) {
+      return res.status(200).json({ skipped: true });
+    }
+    targetTable = 'article_subscribers';
+    payload = JSON.stringify({
+      title: 'כתבה חדשה ב-Poke Value',
+      body: String(record.title),
+      url: '/news.html'
+    });
+  } else {
+    // community_trades (the original webhook): owner alert on pending reports.
+    if (!record || record.status !== 'pending') {
+      return res.status(200).json({ skipped: true });
+    }
+    targetTable = 'push_subscriptions';
+    payload = JSON.stringify({
+      title: 'דיווח עסקה חדש',
+      body: (record.card_name ? String(record.card_name) + ' ' : '') + 'ממתין לאישורך בעמוד הניהול',
+      url: '/admin.html'
+    });
   }
 
   try {
@@ -41,7 +68,7 @@ export default async function handler(req, res) {
     );
 
     const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
-    const { data: subs, error } = await supabase.from('push_subscriptions').select('endpoint, keys');
+    const { data: subs, error } = await supabase.from(targetTable).select('endpoint, keys');
     if (error) {
       console.error('push notify failed: ' + (error.message || 'unknown'));
       return res.status(500).json({ error: 'Server error' });
@@ -49,12 +76,6 @@ export default async function handler(req, res) {
     if (!subs || subs.length === 0) {
       return res.status(200).json({ sent: 0, removed: 0 });
     }
-
-    const payload = JSON.stringify({
-      title: 'דיווח עסקה חדש',
-      body: (record.card_name ? String(record.card_name) + ' ' : '') + 'ממתין לאישורך בעמוד הניהול',
-      url: '/admin.html'
-    });
 
     let sent = 0, removed = 0;
     for (const s of subs) {
@@ -65,7 +86,7 @@ export default async function handler(req, res) {
         const status = e && e.statusCode;
         if (status === 404 || status === 410) {
           // The browser revoked this subscription; delete so it never retries.
-          await supabase.from('push_subscriptions').delete().eq('endpoint', s.endpoint);
+          await supabase.from(targetTable).delete().eq('endpoint', s.endpoint);
           removed++;
         } else {
           console.error('push send failed (status ' + (status || 'unknown') + ')');
