@@ -94,6 +94,12 @@ button.small{padding:8px 18px;font-size:.95rem;margin:14px 12px 0 0}
             <h2>כתבות שפורסמו</h2>
             <div id="articles-list"></div>
         </section>
+        <section id="push-box" class="hidden">
+            <h2>התראות לטלפון</h2>
+            <p>קבלו התראה לטלפון כשדיווח עסקה חדש ממתין לאישור. ההתראה נשלחת רק לדפדפן שממנו מפעילים אותה כאן.</p>
+            <button id="push-enable-btn" class="btn">הפעלת התראות במכשיר זה</button>
+            <p id="push-msg" class="msg"></p>
+        </section>
         <section id="pending-box" class="hidden">
             <h2>דיווחי עסקאות ממתינים לאישור</h2>
             <p>דיווחים שגולשים שלחו בעמוד "דיווח עסקאות". רק דיווחים שתאשרו יופיעו באתר.</p>
@@ -137,9 +143,80 @@ button.small{padding:8px 18px;font-size:.95rem;margin:14px 12px 0 0}
             show('list-box');
             show('pending-box');
             show('approved-box');
+            initPush();
             loadArticles();
             loadTrades();
         }
+
+        // ===== התראות Web Push על דיווחי עסקאות ממתינים (בקשת בעלים 7/11) =====
+        // ללא עלות: Web Push תקני עם VAPID בלבד, בלי חשבון Firebase ובלי ספק בתשלום.
+        function urlBase64ToUint8Array(base64String){
+            var padding = '='.repeat((4 - base64String.length % 4) % 4);
+            var base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+            var raw = atob(base64);
+            var out = new Uint8Array(raw.length);
+            for (var i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+            return out;
+        }
+
+        function initPush(){
+            var btn = document.getElementById('push-enable-btn');
+            if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)){
+                document.getElementById('push-msg').textContent = 'הדפדפן הזה לא תומך בהתראות.';
+                btn.disabled = true;
+                show('push-box');
+                return;
+            }
+            navigator.serviceWorker.register('/sw.js').then(function(reg){
+                show('push-box');
+                return reg.pushManager.getSubscription().then(function(sub){
+                    if (sub && Notification.permission === 'granted'){
+                        btn.classList.add('hidden');
+                        document.getElementById('push-msg').textContent = 'ההתראות פעילות במכשיר זה.';
+                    }
+                });
+            }).catch(function(){
+                show('push-box');
+                document.getElementById('push-msg').textContent = 'לא הצלחנו להכין את ההתראות בדפדפן זה.';
+            });
+        }
+
+        document.getElementById('push-enable-btn').addEventListener('click', function(){
+            var btn = this;
+            btn.disabled = true;
+            msg('push-msg', 'מפעיל...', true);
+            navigator.serviceWorker.ready.then(function(reg){
+                return fetch('/api/push-subscribe').then(function(r){
+                    if (!r.ok) throw new Error('push not configured');
+                    return r.json();
+                }).then(function(cfg){
+                    return Notification.requestPermission().then(function(permission){
+                        if (permission !== 'granted') throw new Error('denied');
+                        return reg.pushManager.subscribe({
+                            userVisibleOnly: true,
+                            applicationServerKey: urlBase64ToUint8Array(cfg.publicKey)
+                        });
+                    });
+                });
+            }).then(function(sub){
+                return fetch('/api/push-subscribe', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ subscription: sub })
+                });
+            }).then(function(r){
+                if (!r.ok) throw new Error('save failed');
+                btn.classList.add('hidden');
+                msg('push-msg', 'ההתראות הופעלו! כשדיווח חדש ימתין לאישור תקבלו התראה.', true);
+            }).catch(function(e){
+                btn.disabled = false;
+                if (e && e.message === 'denied'){
+                    msg('push-msg', 'ההתראות נחסמו בדפדפן. יש לאשר התראות בהגדרות הדפדפן ולנסות שוב.', false);
+                } else {
+                    msg('push-msg', 'ההפעלה נכשלה. נסו שוב.', false);
+                }
+            });
+        });
 
         var GRADER_NAMES = {EAS:'EAS', PSA:'PSA', BGS:'BGS', CGC:'CGC', SGC:'SGC', other:'דירוג'};
 
