@@ -1,5 +1,4 @@
 import { createClient } from '@supabase/supabase-js';
-import * as cheerio from 'cheerio';
 
 const GRADERS = ['PSA', 'BGS', 'CGC', 'EAS', 'TAG'];
 const BASE_WEIGHTS = { PSA: 0.35, BGS: 0.25, CGC: 0.15, EAS: 0.15, TAG: 0.1 };
@@ -12,6 +11,9 @@ const LANG_PATTERNS = {
 };
 
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+// Versioned cache source: rows written by the old raw-HTML scraper pipeline
+// are never read by this version and never mistaken for verified sold results.
+const CACHE_SOURCE = 'sold-structured';
 
 function errMsg(err) {
   let m = err && err.message ? err.message : String(err);
@@ -37,6 +39,12 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'Invalid language' });
   }
 
+  // Paused unless explicitly enabled: set SALES_PROVIDER_ENABLED=true in the
+  // Vercel environment only after credit cost and provider support are confirmed.
+  if (process.env.SALES_PROVIDER_ENABLED !== 'true') {
+    return res.status(503).json({ error: 'Price lookup is paused' });
+  }
+
   if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY || !process.env.SCRAPER_API_KEY) {
     console.error('price lookup failed: a required environment variable is not set');
     return res.status(500).json({ error: 'Server is not configured' });
@@ -47,13 +55,22 @@ export default async function handler(req, res) {
   try {
     const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 
-    const { data: cachedData } = await supabase
+    const { data: cachedData, error: cacheReadError } = await supabase
       .from('price_cache')
       .select('*')
       .eq('query_key', queryKey)
       .eq('language', language)
       .eq('grade', parsedGrade)
+      .eq('source', CACHE_SOURCE)
       .single();
+
+    // PGRST116 = ordinary empty result (a legitimate cache miss). Anything else
+    // (missing table/column, bad key, misconfiguration) must stop here, before
+    // a billed provider request that could not be cached.
+    if (cacheReadError && cacheReadError.code !== 'PGRST116') {
+      console.error('cache read failed: ' + errMsg(cacheReadError));
+      return res.status(500).json({ error: 'Server is not configured' });
+    }
 
     if (cachedData && (Date.now() - new Date(cachedData.updated_at).getTime() < CACHE_TTL_MS)) {
       return res.status(200).json(cachedData);
@@ -68,12 +85,7 @@ export default async function handler(req, res) {
       let sales = [];
       try {
         totalFetches++;
-        sales = await fetchEbaySoldData(queryKey, grader, parsedGrade, language, 90);
-        if (sales.length < 3) {
-          totalFetches++;
-          const extended = await fetchEbaySoldData(queryKey, grader, parsedGrade, language, 365);
-          if (extended.length > 0) sales = extended;
-        }
+        sales = await fetchEbaySoldData(queryKey, grader, parsedGrade, language);
       } catch (err) {
         failedFetches++;
         // Message only: never log request URLs, they contain the API key.
@@ -125,13 +137,20 @@ export default async function handler(req, res) {
       grade: parsedGrade,
       poke_value: finalPokeValue,
       total_sales: totalSalesCount,
-      source: 'sold',
+      source: CACHE_SOURCE,
       breakdown: finalBreakdown,
       updated_at: new Date().toISOString()
     };
 
+    // supabase-js reports ordinary write failures as { error }, not a throw:
+    // check both so a failed cache write is always logged.
     try {
-      await supabase.from('price_cache').upsert(payload, { onConflict: 'query_key,language,grade' });
+      const { error: cacheWriteError } = await supabase
+        .from('price_cache')
+        .upsert(payload, { onConflict: 'query_key,language,grade' });
+      if (cacheWriteError) {
+        console.error('cache write failed: ' + errMsg(cacheWriteError));
+      }
     } catch (cacheErr) {
       // Cache trouble must not fail a good live result.
       console.error('cache write failed: ' + errMsg(cacheErr));
@@ -145,55 +164,56 @@ export default async function handler(req, res) {
   }
 }
 
-async function fetchEbaySoldData(cardQuery, grader, grade, language, days) {
-  // `days` keeps the 90/365 fallback structure; the eBay sold search itself
-  // has no day-range parameter, it always returns recent completed listings.
+async function fetchEbaySoldData(cardQuery, grader, grade, language) {
+  // ScraperAPI's structured eBay Search endpoint returns parsed JSON for sold
+  // listings (their officially documented eBay product). eBay's sold view
+  // covers roughly the last 90 days; it has no day-range parameter.
   let searchString = `${cardQuery} ${grader} ${grade}`;
   if (language !== 'English') searchString += ` ${language}`;
 
-  const targetUrl = 'https://www.ebay.com/sch/i.html?_nkw=' + encodeURIComponent(searchString) + '&LH_Sold=1&LH_Complete=1';
-  // ScraperAPI requires its own parameters to come before the url parameter.
-  const proxyUrl = 'https://api.scraperapi.com/?api_key=' + encodeURIComponent(process.env.SCRAPER_API_KEY) + '&url=' + encodeURIComponent(targetUrl);
+  const endpoint = 'https://api.scraperapi.com/structured/ebay/search/v2'
+    + '?api_key=' + encodeURIComponent(process.env.SCRAPER_API_KEY)
+    + '&query=' + encodeURIComponent(searchString)
+    + '&show_only=sold_items';
 
-  // Never log proxyUrl: it contains the API key.
-  const response = await fetch(proxyUrl);
+  // Never log endpoint: it contains the API key.
+  const response = await fetch(endpoint);
   if (!response.ok) {
     throw new Error('data provider responded with HTTP ' + response.status);
   }
 
-  const html = await response.text();
-  const $ = cheerio.load(html);
-  const listings = [];
-
-  if ($('li.s-item, li.s-card').length === 0) {
-    if (/no exact matches|0 results/i.test(html)) return [];   // genuinely no results
-    if (/pardon our interruption|captcha|security measure|are you a robot/i.test(html)) {
-      throw new Error('blocked by bot check');
-    }
-    throw new Error('unexpected page structure from sales provider');
+  let items;
+  try {
+    items = await response.json();
+  } catch (e) {
+    throw new Error('unexpected response format from sales provider');
+  }
+  if (!Array.isArray(items)) {
+    throw new Error('unexpected response format from sales provider');
   }
 
-  $('li.s-item, li.s-card').each((index, element) => {
-    const title = $(element).find('.s-item__title').text().trim();
-    const priceText = $(element).find('.s-item__price').text().trim();
-    if (!title || !priceText || JUNK_KEYWORDS.test(title)) return;
-    if (/\bto\b/i.test(priceText)) return;      // price range, not a single sale
-    if (!/^(US\s*)?\$/.test(priceText)) return;  // dollar-denominated prices only
+  const listings = [];
+  for (const item of items) {
+    const title = String(item.product_title || '').trim();
+    const p = item.item_price;
+    if (!title || !p || JUNK_KEYWORDS.test(title)) continue;
+    // A from/to range is not a single sale; only fixed prices count.
+    if (typeof p.value !== 'number') continue;
+    if (p.currency !== 'USD') continue;        // dollar-denominated prices only
 
     if (language === 'English') {
-      if (Object.values(LANG_PATTERNS).some(regex => regex.test(title))) return;
+      if (Object.values(LANG_PATTERNS).some(regex => regex.test(title))) continue;
     } else {
-      if (!LANG_PATTERNS[language].test(title)) return;
+      if (!LANG_PATTERNS[language].test(title)) continue;
     }
 
     const exactGradeRegex = new RegExp(`\\b${grader}\\s*-?\\s*${grade}(?!\\d|\\.\\d)`, 'i');
-    if (!exactGradeRegex.test(title)) return;
+    if (!exactGradeRegex.test(title)) continue;
 
-    const numericPrice = parseFloat(priceText.replace(/[^0-9.]/g, ''));
-    if (!isNaN(numericPrice) && numericPrice > 0) {
-      listings.push({ price: numericPrice });
+    if (p.value > 0) {
+      listings.push({ price: p.value });
     }
-  });
+  }
 
   return listings.slice(0, 10);
 }
