@@ -140,6 +140,8 @@ body{font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif}
                 <h2 id="selName"></h2>
                 <p class="set" id="selSet"></p>
                 <button id="changeCard" class="pv-change">בחירת קלף אחר</button>
+                <button id="favBtn" class="pv-change pv-fav hidden">♡ שמירה במועדפים</button>
+                <p id="favNote" class="pv-variant hidden"></p>
                 <p class="pv-variant">התמונה ממחישה את הקלף. מאגר התמונות לא תמיד מבחין בין וריאנטים של אותה הדפסה (למשל מהדורה ראשונה, unlimited או reverse holo), ולכן היא לא בהכרח ההדפסה המדויקת שבידכם.</p>
             </div>
         </div>
@@ -185,6 +187,8 @@ body{font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif}
         <p class="disclaimer">האתר בפיתוח. ההערכות מתוכננות להתבסס על מכירות שהסתיימו ב-eBay; כשהן יוצגו, הן יהיו הערכה סטטיסטית בלבד ולא שמאות מקצועית או הבטחה למחיר מכירה בפועל.</p>
         <p class="credit">נתוני ותמונות הקלפים מסופקים על ידי <a href="https://tcgdex.net" target="_blank" rel="noopener">TCGdex</a>. פוקימון ושמות הקלפים הם סימנים מסחריים של Nintendo/Creatures Inc./GAME FREAK inc.</p>
     </footer>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="auth.js"></script>
     <script>
         // DEVELOPMENT BUILD: price lookup is disabled in the frontend so the paused
         // notice is accurate and no server/provider calls can be triggered.
@@ -444,7 +448,69 @@ body{font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif}
             // before SEARCH_ENABLED is turned on the backend needs exact-identity
             // support (set + number), and this field is the contract for it.
             card.priceQuery = card.name + ' ' + setIdOf(card) + ' ' + (card.localId || '');
+            window.__favCard = {
+                card_key: card.id ? String(card.id) : [card.name, setIdOf(card), card.localId || '', langAtPick].join('|'),
+                tcg_id: card.id ? String(card.id) : null,
+                card_name: String(card.name || ''),
+                set_name: setNames[setIdOf(card)] || setIdOf(card),
+                card_number: card.localId ? String(card.localId) : null,
+                language: langAtPick,
+                image_url: (card.image ? String(card.image) + '/high.png' : null)
+            };
+            updateFavButton();
             showPrices(card);
+        }
+
+        // ===== מועדפים (פיצ'ר מנוי - בעלים 7/11 19:28) =====
+        var favState = { saved: false, busy: false };
+        var favBtn = document.getElementById('favBtn');
+        var favNote = document.getElementById('favNote');
+
+        function favMsg(t){ favNote.textContent = t; favNote.classList.toggle('hidden', !t); }
+
+        function updateFavButton(){
+            if (!window.PokeAuth || !PokeAuth.enabled()) return;
+            favBtn.classList.remove('hidden');
+            favBtn.textContent = favState.saved ? '♥ שמור במועדפים' : '♡ שמירה במועדפים';
+            if (!PokeAuth.isSignedIn()){
+                favMsg('המועדפים שמורים למנויים. התחברו עם Google כדי לראות את האפשרות.');
+            } else if (!PokeAuth.isSubscriber()){
+                favMsg('המועדפים זמינים למנויים.');
+            } else {
+                favMsg('');
+            }
+        }
+
+        favBtn.addEventListener('click', function(){
+            if (!window.PokeAuth || !PokeAuth.enabled() || favState.busy) return;
+            if (!PokeAuth.isSignedIn()){ PokeAuth.signIn(); return; }
+            if (!PokeAuth.isSubscriber()){ favMsg('המועדפים זמינים למנויים.'); return; }
+            var fav = window.__favCard;
+            if (!fav) return;
+            favState.busy = true;
+            var sb = PokeAuth.client();
+            var done = function(saved){
+                favState.busy = false; favState.saved = saved; updateFavButton();
+            };
+            if (favState.saved){
+                sb.from('user_favorites').delete().eq('user_id', PokeAuth.user().id).eq('card_key', fav.card_key)
+                    .then(function(r){ if (r.error){ favMsg('שגיאה. נסו שוב.'); favState.busy = false; return; } done(false); });
+            } else {
+                sb.from('user_favorites').insert({
+                    user_id: PokeAuth.user().id,
+                    card_key: fav.card_key, tcg_id: fav.tcg_id, card_name: fav.card_name,
+                    set_name: fav.set_name, card_number: fav.card_number,
+                    language: fav.language, image_url: fav.image_url
+                }).then(function(r){ if (r.error){ favMsg('שגיאה. נסו שוב.'); favState.busy = false; return; } done(true); });
+            }
+        });
+
+        // אתחול auth + סטטוס לב לקלף הנבחר
+        if (window.PokeAuth && PokeAuth.enabled()){
+            PokeAuth.ready().then(function(){
+                PokeAuth.mountHeaderButton(document.querySelector('.pv-header-inner'));
+                updateFavButton();
+            });
         }
 
         document.getElementById('changeCard').addEventListener('click', () => {

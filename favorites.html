@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>המועדפים שלי - Poke Value</title>
+    <link rel="icon" type="image/jpeg" href="/favicon.png.jpeg">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="auth.js"></script>
+    <style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif;background:#f8fafc;color:#1e293b;line-height:1.7}
+header{background:#fff;border-bottom:1px solid #e2e8f0;padding:20px 16px;box-shadow:0 1px 2px rgba(0,0,0,.05)}
+header .wrap{max-width:48rem;margin:0 auto;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px}
+h1{font-size:1.5rem;font-weight:800}
+h1 span{color:#2563eb}
+nav a{color:#2563eb;text-decoration:underline;margin:0 8px;font-size:0.95rem}
+main{max-width:48rem;margin:0 auto;padding:32px 16px 48px}
+section{background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:20px 24px;margin-bottom:20px;box-shadow:0 1px 2px rgba(0,0,0,.05)}
+h2{font-size:1.2rem;font-weight:700;color:#1e293b;margin-bottom:10px}
+p{margin-bottom:10px;color:#475569}
+footer{background:#fff;border-top:1px solid #e2e8f0;padding:24px 16px;text-align:center}
+footer .disclaimer{color:#64748b;font-size:0.85rem;max-width:40rem;margin:8px auto 0}
+footer .credit{color:#64748b;font-size:0.85rem;max-width:40rem;margin:8px auto 0}
+.empty-state{color:#64748b;font-style:italic}
+button.btn{background:#2563eb;color:#fff;border:none;padding:10px 22px;border-radius:10px;font-weight:600;font-size:1rem;cursor:pointer;transition:background .15s}
+button.btn:hover{background:#1d4ed8}
+button.btn.link{background:#fff;border:1px solid #2563eb;color:#2563eb;text-decoration:none}
+button.btn.link:hover{background:#eff6ff}
+.hidden{display:none}
+.fav-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:14px;margin-top:12px}
+.fav-card{border:1px solid #e2e8f0;border-radius:10px;padding:10px;text-align:center;background:#fff}
+.fav-card img{width:100%;border-radius:6px}
+.fav-card .nm{font-weight:600;font-size:.95rem;margin-top:6px;color:#1e293b}
+.fav-card .st{color:#64748b;font-size:.8rem;margin-bottom:6px}
+.fav-card button{background:#fff;border:1px solid #dc2626;color:#dc2626;border-radius:8px;padding:4px 12px;font-size:.85rem;cursor:pointer}
+.pv-auth-btn{background:#fff;border:1px solid #2563eb;color:#2563eb;border-radius:8px;padding:4px 12px;font-size:.85rem;cursor:pointer}
+    </style>
+</head>
+<body>
+    <header>
+        <div class="wrap">
+            <h1>Poke <span>Value</span></h1>
+            <nav>
+                <a href="index.html">חיפוש</a>
+                <a href="news.html">חדשות</a>
+                <a href="deals.html">דיווח עסקאות</a>
+                <a href="favorites.html">המועדפים שלי</a>
+            </nav>
+        </div>
+    </header>
+    <main>
+        <section>
+            <h2>המועדפים שלי</h2>
+            <p id="favStatus" class="empty-state">טוען...</p>
+            <div id="favAuth" class="hidden">
+                <p id="favAuthMsg"></p>
+                <button id="favAuthBtn" class="btn">התחברות עם Google</button>
+            </div>
+            <div id="favGrid" class="fav-grid hidden"></div>
+        </section>
+    </main>
+    <footer>
+        <nav>
+            <a href="index.html">חיפוש</a>
+            <a href="news.html">חדשות</a>
+            <a href="deals.html">דיווח עסקאות</a>
+            <a href="how-it-works.html">איך זה עובד</a>
+            <a href="about.html">אודות</a>
+            <a href="privacy.html">פרטיות</a>
+            <a href="terms.html">תנאי שימוש</a>
+            <a href="contact.html">צור קשר</a>
+        </nav>
+        <p class="disclaimer">האתר בפיתוח. ההערכות מתוכננות להתבסס על מכירות שהסתיימו ב-eBay; כשהן יוצגו, הן יהיו הערכה סטטיסטית בלבד ולא שמאות מקצועית או הבטחה למחיר מכירה בפועל.</p>
+        <p class="credit">נתוני ותמונות הקלפים מסופקים על ידי <a href="https://tcgdex.net" target="_blank" rel="noopener">TCGdex</a>. פוקימון ושמות הקלפים הם סימנים מסחריים של Nintendo/Creatures Inc./GAME FREAK inc.</p>
+    </footer>
+    <script>
+    (function(){
+        var statusEl = document.getElementById('favStatus');
+        var authBox = document.getElementById('favAuth');
+        var authMsg = document.getElementById('favAuthMsg');
+        var authBtn = document.getElementById('favAuthBtn');
+        var grid = document.getElementById('favGrid');
+
+        if (!window.PokeAuth || !PokeAuth.enabled()){
+            statusEl.textContent = 'מערכת החשבונות עוד לא פעילה.';
+            return;
+        }
+
+        authBtn.addEventListener('click', function(){ PokeAuth.signIn(); });
+
+        function showAuth(msg){
+            statusEl.classList.add('hidden');
+            authMsg.textContent = msg;
+            authBox.classList.remove('hidden');
+        }
+
+        function loadFavorites(){
+            var sb = PokeAuth.client();
+            var uid = PokeAuth.user().id;
+            sb.from('user_favorites').select('card_key,card_name,set_name,card_number,language,image_url')
+                .eq('user_id', uid).order('created_at', {ascending:false})
+                .then(function(res){
+                    statusEl.classList.add('hidden');
+                    if (res.error){ statusEl.textContent = 'שגיאה בטעינת המועדפים.'; statusEl.classList.remove('hidden'); return; }
+                    if (!res.data || !res.data.length){
+                        statusEl.textContent = 'עדיין לא שמרת קלפים. חפשו קלף בעמוד הראשי ולחצו "שמירה במועדפים".';
+                        statusEl.classList.remove('hidden');
+                        return;
+                    }
+                    grid.innerHTML = '';
+                    res.data.forEach(function(f){
+                        var card = document.createElement('div');
+                        card.className = 'fav-card';
+                        if (f.image_url){
+                            var img = document.createElement('img');
+                            img.src = f.image_url; img.alt = f.card_name; img.loading = 'lazy';
+                            card.appendChild(img);
+                        }
+                        var nm = document.createElement('div');
+                        nm.className = 'nm'; nm.textContent = f.card_name;
+                        card.appendChild(nm);
+                        var st = document.createElement('div');
+                        st.className = 'st'; st.textContent = (f.set_name || '') + (f.card_number ? ' · ' + f.card_number : '');
+                        card.appendChild(st);
+                        var rm = document.createElement('button');
+                        rm.textContent = 'הסרה';
+                        rm.addEventListener('click', function(){
+                            rm.disabled = true;
+                            sb.from('user_favorites').delete().eq('user_id', uid).eq('card_key', f.card_key)
+                                .then(function(){ loadFavorites(); });
+                        });
+                        card.appendChild(rm);
+                        grid.appendChild(card);
+                    });
+                    grid.classList.remove('hidden');
+                });
+        }
+
+        PokeAuth.ready().then(function(){
+            if (!PokeAuth.isSignedIn()){
+                showAuth('המועדפים שמורים למנויים. התחברו עם Google כדי לראות את האפשרות.');
+                authBtn.textContent = 'התחברות עם Google';
+                return;
+            }
+            if (!PokeAuth.isSubscriber()){
+                showAuth('המועדפים זמינים למנויים.');
+                authBtn.classList.add('hidden');
+                return;
+            }
+            loadFavorites();
+        });
+    })();
+    </script>
+</body>
+</html>
