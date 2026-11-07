@@ -8,11 +8,13 @@
 // מועדפים הם פיצ'ר מנוי (בעלים 7/11 19:28): window.PokeAuth.isSubscriber()
 // בודק הרשאה פעילה בטבלת subscriptions; האכיפה האמיתית ברמת RLS בשרת,
 // כאן רק חוויית המשתמש (הסתרת/הצגת הלב והודעת מנוי).
+// חשבון הבעלים פטור מתשלום (בעלים 7/11 19:37) - גם כאן וגם במדיניות ה-RLS.
 window.PV_AUTH_ENABLED = false;
 
 window.PokeAuth = (function(){
   var SUPABASE_URL = 'https://yfxsvmujskqvtlnnfvog.supabase.co';
   var SUPABASE_ANON_KEY = 'sb_publishable_9rKl0u1M4cndyvhN4wzA0A_zbsmtFch';
+  var OWNER_ID = 'b362f086-9c13-45c6-b890-d222459275b9';
   var client = null;
   var currentUser = null;
   var subscriber = null; // null = unknown, false = guest/no entitlement, true = active
@@ -27,7 +29,7 @@ window.PokeAuth = (function(){
       if (!currentUser){ subscriber = false; return null; }
       return client.from('subscriptions').select('user_id').eq('user_id', currentUser.id).eq('status', 'active').maybeSingle()
         .then(function(r){
-          subscriber = !!(r && r.data);
+          subscriber = currentUser.id === OWNER_ID || !!(r && r.data);
           return currentUser;
         });
     });
