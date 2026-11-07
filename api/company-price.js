@@ -7,7 +7,12 @@ import { createClient } from '@supabase/supabase-js';
 // grader+grade search instead of the all-graders fanout.
 //
 //   GET /api/company-price?card=<query>&language=<lang>
-//       &grader=PSA|BGS|CGC|EAS|TAG|RAW[&grade=1..10]
+//       &grader=PSA|BGS|CGC|TAG|RAW[&grade=1..10]
+//
+// EAS is deliberately NOT here (owner decision Nov7 17:36): EAS recorded
+// sales come only from this site's own deal reports, never from an external
+// fetch, so this endpoint never searches for EAS sales. EAS values appear
+// only once the on-site deal-report source is wired up and approved.
 //
 // RAW means ungraded: the search carries no grader/grade and any title that
 // mentions a grading company with a grade is filtered out, so the raw value
@@ -16,9 +21,11 @@ import { createClient } from '@supabase/supabase-js';
 // damaged and clean raw copies cannot yet be separated; the frontend shows
 // the raw value without a condition claim.
 
-const GRADERS = ['PSA', 'BGS', 'CGC', 'EAS', 'TAG'];
+const GRADERS = ['PSA', 'BGS', 'CGC', 'TAG']; // no EAS: local deal reports only
 const LANGUAGES = ['English', 'Japanese', 'Chinese', 'Korean'];
 const JUNK_KEYWORDS = /\b(lot|bundle|set of|proxy|custom|reprint|replica|orica|empty slab|slab only|fake)\b/i;
+// EAS stays in this filter: an 'EAS 9' title is still a graded card and must
+// never count toward the raw value, even though EAS is not a lookup column.
 const GRADED_TITLE = /\b(PSA|BGS|CGC|EAS|TAG|SGC|ACE)\s*-?\s*\d/i;
 const LANG_PATTERNS = {
   Japanese: /\b(japanese|japan|jpn|jp)\b/i,

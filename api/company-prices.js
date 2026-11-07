@@ -66,6 +66,10 @@ export default async function handler(req, res) {
 
     const now = Date.now();
     const cells = (rows || [])
+      // EAS never comes from the external provider (owner decision Nov7
+      // 17:36): its recorded sales are this site's own deal reports, so any
+      // cached EAS row is excluded here rather than displayed as a company price.
+      .filter(r => !String(r.card_key).toLowerCase().endsWith('|eas'))
       .filter(r => (now - new Date(r.updated_at).getTime()) < CACHE_TTL_MS)
       .map(r => ({
         grader: String(r.card_key).slice(keyPrefix.length).toUpperCase(),

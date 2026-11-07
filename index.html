@@ -158,7 +158,7 @@ body{font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif}
                     </table>
                 </div>
                 <p class="pv-chart-note">לחיצה על תא טוענת שווי של אותה חברה וציון ממכירות שהסתיימו בפועל. מחיר שמור מוצג עם תאריך העדכון שלו.</p>
-                <p class="pv-chart-note">כל התאים, כולל EAS, מציגים מכירות בפועל של אותה חברה. הערכת השווי המשוקללת של Poke Value עדיין בבדיקה ואינה מוצגת. ערך "לא מדורג" מגיע ממכירות של קלפים לא מדורגים, אך אין במקור הפרדת מצב, ולכן הוא מכסה מצבים מעורבים.</p>
+                <p class="pv-chart-note">כל התאים מציגים מכירות בפועל של אותה חברת דירוג. מכירות EAS מתועדות רק מדיווחי העסקאות באתר ואינן נטענות ממקור חיצוני; הערכת השווי של EAS מחושבת בנוסחה מנתוני ארבע החברות, עדיין בבדיקה ואינה מוצגת. ערך "לא מדורג" מגיע ממכירות של קלפים לא מדורגים, אך אין במקור הפרדת מצב, ולכן הוא מכסה מצבים מעורבים.</p>
                 <div id="historySection" class="hidden">
                     <h3 class="pv-sales-title">היסטוריית מחירים</h3>
                     <div id="historyChart" dir="ltr"></div>
@@ -499,7 +499,7 @@ body{font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif}
         //     passive batch read: all fresh (<=14d) cached cells for the card.
         //     Never calls the provider.
         //   GET /api/company-price?card=<exact identity>&language=<lang>
-        //       &grader=PSA|BGS|CGC|EAS|TAG|RAW[&grade=1..10]
+        //       &grader=PSA|BGS|CGC|TAG|RAW[&grade=1..10]
         //     click path: serves the fresh cached value, otherwise fetches the
         //     provider, stores, and returns.
         //   -> { card_name, language, grader, grade, price, total_sales,
@@ -516,8 +516,10 @@ body{font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif}
         // currencies; damaged/played raw copies never merge with clean raw
         // into one unqualified price.
         // MATRIX_GRADERS mirrors the backend's coverage (api/company-price.js).
-        // These are clickable lookup cells, not preloaded data.
-        const MATRIX_GRADERS = ['PSA', 'BGS', 'CGC', 'EAS', 'TAG'];
+        // These are clickable lookup cells, not preloaded data. No EAS column
+        // (owner decision Nov7 17:36): EAS recorded sales come only from this
+        // site's deal reports, never from the external provider.
+        const MATRIX_GRADERS = ['PSA', 'BGS', 'CGC', 'TAG'];
         const cellInflight = new Set(); // repeated clicks join the same request
 
         function runPriceLookup(card) {
