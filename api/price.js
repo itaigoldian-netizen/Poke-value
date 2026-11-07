@@ -1,6 +1,12 @@
 import { createClient } from '@supabase/supabase-js';
 
-const GRADERS = ['PSA', 'BGS', 'CGC', 'EAS', 'TAG'];
+// External eBay lookups cover the four foreign companies only (owner decision
+// Nov7 17:39): the site must never search eBay for EAS sales - EAS recorded
+// sales come exclusively from this site's approved community deal reports.
+// The EAS weight stays reserved so approved local reports can join the
+// weighted estimate once that wiring is separately approved (v3, parked);
+// until then EAS simply does not participate in the aggregate.
+const GRADERS = ['PSA', 'BGS', 'CGC', 'TAG'];
 const BASE_WEIGHTS = { PSA: 0.35, BGS: 0.25, CGC: 0.15, EAS: 0.15, TAG: 0.1 };
 const LANGUAGES = ['English', 'Japanese', 'Chinese', 'Korean'];
 const JUNK_KEYWORDS = /\b(lot|bundle|set of|proxy|custom|reprint|replica|orica|empty slab|slab only|fake)\b/i;
