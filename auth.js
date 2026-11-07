@@ -1,15 +1,15 @@
 // Poke Value auth: הרשמה/התחברות עם Google דרך Supabase Auth
 // (בקשת בעלים 7/11 19:27: "חשבון שישמש למנויים ועוד דברים כמו שמירת קלפים במועדפים").
 //
-// AUTH_ENABLED נשאר false עד שהבעלים מאשר ומושלמת ההגדרה (Google OAuth client
-// בחשבון ה-Google של הבעלים + הפעלת הספק ב-Supabase) - הקוד נשלח רדום ואין
-// הרשמה ציבורית בפועל לפני כן.
+// AUTH_ENABLED הופעל (בעלים 7/11 19:51): Google OAuth client הוגדר בפרויקט
+// GCP poke-value-514017 (מסך הסכמה פורסם ל-production), הספק Google פעיל
+// ב-Supabase, והרשמה ציבורית מאושרת.
 //
 // מועדפים הם פיצ'ר מנוי (בעלים 7/11 19:28): window.PokeAuth.isSubscriber()
 // בודק הרשאה פעילה בטבלת subscriptions; האכיפה האמיתית ברמת RLS בשרת,
 // כאן רק חוויית המשתמש (הסתרת/הצגת הלב והודעת מנוי).
 // חשבון הבעלים פטור מתשלום (בעלים 7/11 19:37) - גם כאן וגם במדיניות ה-RLS.
-window.PV_AUTH_ENABLED = false;
+window.PV_AUTH_ENABLED = true;
 
 window.PokeAuth = (function(){
   var SUPABASE_URL = 'https://yfxsvmujskqvtlnnfvog.supabase.co';
