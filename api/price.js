@@ -11,9 +11,6 @@ const LANG_PATTERNS = {
 };
 
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
-// Versioned cache source: rows written by the old raw-HTML scraper pipeline
-// are never read by this version and never mistaken for verified sold results.
-const CACHE_SOURCE = 'sold-structured';
 
 function errMsg(err) {
   let m = err && err.message ? err.message : String(err);
@@ -50,18 +47,22 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'Server is not configured' });
   }
 
+  // Version-tagged cache key: rows written by any other pipeline version are
+  // never read as this version's verified results. No schema change needed.
+  const CACHE_KEY_PREFIX = 's1:';
   const queryKey = card.trim().toLowerCase().replace(/\s+/g, ' ');
+  const cacheKey = CACHE_KEY_PREFIX + queryKey;
 
   try {
     const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 
+    // Column names match the user's actual price_cache table.
     const { data: cachedData, error: cacheReadError } = await supabase
       .from('price_cache')
       .select('*')
-      .eq('query_key', queryKey)
+      .eq('card_key', cacheKey)
       .eq('language', language)
       .eq('grade', parsedGrade)
-      .eq('source', CACHE_SOURCE)
       .single();
 
     // PGRST116 = ordinary empty result (a legitimate cache miss). Anything else
@@ -73,7 +74,17 @@ export default async function handler(req, res) {
     }
 
     if (cachedData && (Date.now() - new Date(cachedData.updated_at).getTime() < CACHE_TTL_MS)) {
-      return res.status(200).json(cachedData);
+      return res.status(200).json({
+        query_key: cachedData.card_key,
+        card_name: cachedData.card_query,
+        language: cachedData.language,
+        grade: cachedData.grade,
+        poke_value: cachedData.price,
+        total_sales: cachedData.sample_count,
+        source: 'sold',
+        breakdown: cachedData.breakdown,
+        updated_at: cachedData.updated_at
+      });
     }
 
     const perGraderResults = {};
@@ -137,9 +148,21 @@ export default async function handler(req, res) {
       grade: parsedGrade,
       poke_value: finalPokeValue,
       total_sales: totalSalesCount,
-      source: CACHE_SOURCE,
+      source: 'sold',
       breakdown: finalBreakdown,
       updated_at: new Date().toISOString()
+    };
+
+    // Same data, using the actual table's column names.
+    const cacheRow = {
+      card_key: cacheKey,
+      card_query: card.trim(),
+      language,
+      grade: parsedGrade,
+      price: finalPokeValue,
+      sample_count: totalSalesCount,
+      breakdown: finalBreakdown,
+      updated_at: payload.updated_at
     };
 
     // supabase-js reports ordinary write failures as { error }, not a throw:
@@ -147,7 +170,7 @@ export default async function handler(req, res) {
     try {
       const { error: cacheWriteError } = await supabase
         .from('price_cache')
-        .upsert(payload, { onConflict: 'query_key,language,grade' });
+        .upsert(cacheRow, { onConflict: 'card_key,language,grade' });
       if (cacheWriteError) {
         console.error('cache write failed: ' + errMsg(cacheWriteError));
       }
