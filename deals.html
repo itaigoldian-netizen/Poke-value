@@ -228,7 +228,8 @@ button.link:hover{background:#eff6ff}
 
         function fmtPrice(price, currency){
             var n = Number(price);
-            var s = isNaN(n) ? String(price) : n.toLocaleString('he-IL');
+            if (isNaN(n)) return null; // a missing/garbled price never renders as "undefined"
+            var s = n.toLocaleString('he-IL');
             return currency === 'USD' ? s + '$' : s + ' ₪';
         }
 
@@ -263,7 +264,9 @@ button.link:hover{background:#eff6ff}
                         }
                         var meta = document.createElement('p');
                         meta.className = 'meta';
-                        var parts = ['במחיר ' + fmtPrice(t.price, t.currency)];
+                        var parts = [];
+                        var priceTxt = fmtPrice(t.price, t.currency);
+                        if (priceTxt) parts.push('במחיר ' + priceTxt);
                         var d = fmtDate(t.trade_date);
                         if (d) parts.push('ב-' + d);
                         if (t.card_set_name || t.card_number) parts.push([t.card_set_name, t.card_number].filter(Boolean).join(' · '));

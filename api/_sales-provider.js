@@ -172,6 +172,13 @@ export async function resolveCardVariant(tcgId, language, variantRaw) {
   if (variantRaw !== undefined && variantRaw !== '' && !variantKey) {
     return { error: { status: 400, body: { error: 'Invalid variant' } } };
   }
+  // Language is validated by the record itself (Main review Nov7 22:36):
+  // TCGdex serves a card only under the language paths where that printing
+  // exists (verified live: /v2/ja/cards/base1-4 -> 404), so a tcg id +
+  // language that do not belong together fail closed here. Downstream, both
+  // providers additionally require per-sale language evidence (script pattern
+  // / API language tag); a sale with insufficient language evidence is
+  // excluded, which yields honest no-data rather than cross-language mixing.
   const detail = await fetchTcgdexDetail(tcgId, language);
   const model = detail ? variantOptionsFromDetail(detail.variants_detailed) : null;
   if (!model) return { error: { status: 503, body: { error: 'Variant verification unavailable' } } };
