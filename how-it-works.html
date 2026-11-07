@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>איך זה עובד - Poke Value</title>
+    <style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif;background:#f8fafc;color:#1e293b;line-height:1.7}
+header{background:#fff;border-bottom:1px solid #e2e8f0;padding:20px 16px;box-shadow:0 1px 2px rgba(0,0,0,.05)}
+header .wrap{max-width:48rem;margin:0 auto;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px}
+h1{font-size:1.5rem;font-weight:800}
+h1 span{color:#2563eb}
+nav a{color:#2563eb;text-decoration:underline;margin:0 8px;font-size:0.95rem}
+main{max-width:48rem;margin:0 auto;padding:32px 16px 48px}
+section{background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:20px 24px;margin-bottom:20px;box-shadow:0 1px 2px rgba(0,0,0,.05)}
+h2{font-size:1.2rem;font-weight:700;color:#1e293b;margin-bottom:10px}
+p{margin-bottom:10px;color:#475569}
+ul{margin:0 20px 10px 0;color:#475569}
+li{margin-bottom:6px}
+strong{color:#1e293b}
+footer{background:#fff;border-top:1px solid #e2e8f0;padding:24px 16px;text-align:center}
+footer .disclaimer{color:#64748b;font-size:0.85rem;max-width:40rem;margin:8px auto 0}
+.notice{background:#fef3c7;border:1px solid #f59e0b;border-radius:12px;padding:14px 20px;margin-bottom:20px;color:#92400e;font-weight:600;line-height:1.6}
+    </style>
+</head>
+<body>
+    <header>
+        <div class="wrap">
+            <h1>Poke <span>Value</span></h1>
+            <nav>
+                <a href="index.html">חיפוש</a>
+                <a href="how-it-works.html">איך זה עובד</a>
+                <a href="privacy.html">פרטיות</a>
+            </nav>
+        </div>
+    </header>
+    <main>
+        <div class="notice">האתר בפיתוח: חיפוש המחירים מושהה זמנית, והשיטה המתוארת כאן טרם אומתה מול נתונים אמיתיים.</div>
+        <section>
+            <h2>מה האתר נועד לעשות?</h2>
+            <p>Poke Value נועד לחשב הערכת שווי ("Poke Value") לקלפי פוקימון מדורגים, לכל ציון EAS מ-1 עד 10, בארבע שפות של קלפים: אנגלית, יפנית, סינית וקוריאנית. כשהצגת המחירים תופעל, לכל ציון יוצג מחיר משוקלל וגם מספר המכירות הכולל שנמצאו. שמות ותמונות הקלפים באתר מגיעים ממאגר הקלפים הפתוח TCGdex.</p>
+        </section>
+        <section>
+            <h2>המתודה המתוכננת (היעד)</h2>
+            <p>המטרה היא שעבור כל ציון EAS האתר יחפש ב-eBay <strong>מכירות שהסתיימו</strong> של אותו קלף, בדירוג של חמש חברות דירוג: PSA, BGS, CGC, EAS ו-TAG, באותו ציון ובאותה שפה. היעד הוא לפחות 3 המכירות האחרונות מכל חברה; אם קיימות פחות, ייכללו המכירות הקיימות (אחת או שתיים) ויוצג מספר המכירות בפועל. המחיר המשוקלל יחושב מהמכירות של כל החברות, עם משקלות קבועים שהוגדרו באתר כהנחה; המשקלות עדיין לא אומתו מול שוק אמיתי.</p>
+        </section>
+        <section>
+            <h2>מה מיושם כרגע בקוד (גרסת פיתוח, לא מאומתת)</h2>
+            <p>גרסת הפיתוח הנוכחית עובדת כך: מכל חברת דירוג נלקחות עד 10 מכירות תואמות (לאחר סינון מכירות חשודות כמו lots והדפסים חוזרים, מכירות שאינן בדולרים, טווחי מחירים, וציון או שפה לא תואמים), מחושב <strong>החציון</strong> של המחירים שלה, והחציונים מחוברים בממוצע משוקלל: PSA משקל 35%, BGS משקל 25%, CGC משקל 15%, EAS משקל 15% ו-TAG משקל 10%, עם חלוקה מחדש של המשקלות כשלחלק מהחברות אין נתונים.</p>
+            <p><strong>שימו לב:</strong> גישת ספק הנתונים, עדכנות תאריכי המכירות, שקילות הציונים בין החברות והמשקלות - כולם עדיין לא אומתו. לכן גרסה זו עשויה להשתנות לפני שהחיפוש יופעל, וייתכן שהיא לא זהה ליעד המתואר למעלה.</p>
+        </section>
+        <section>
+            <h2>מה חשוב לדעת על המגבלות?</h2>
+            <ul>
+                <li>הנתונים מתוכננים להתבסס על מכירות שהסתיימו ב-eBay, תצוגה שמכסה בערך את 90 הימים האחרונים. מכירות ישנות יותר לא נכללות.</li>
+                <li>לפעמים יש מעט מכירות לציון מסוים, או שאין בכלל. במקרה כזה ההערכה תתבסס על מדגם קטן או לא תוצג.</li>
+                <li>מכירות מסוג "Best Offer" עשויות להירשם ב-eBay לפי המחיר המבוקש, ולאו דווקא לפי המחיר שהתקבל בפועל.</li>
+                <li>תוצאות יישמרו במטמון ועשויות להיות מעודכנות עד כ-24 שעות אחורה.</li>
+                <li>המשקלות בין חברות הדירוג הם הנחה של האתר, ולא מדד רשמי של אף חברה.</li>
+                <li>תמונות הקלפים (ממאגר TCGdex) ממחישות את הקלף אך לא תמיד מבחינות בין וריאנטים של אותה הדפסה (מהדורה ראשונה, unlimited, reverse holo), ולחלק מהקלפים - בעיקר בסינית ובקוריאנית - אין תמונה במאגר.</li>
+            </ul>
+            <p><strong>כשיוצגו, ההערכות יהיו הערכה סטטיסטית בלבד.</strong> הן לא יהיו שמאות מקצועית, לא הבטחה למחיר מכירה בפועל, ויכולות להיות שונות מהמחיר שבו קלף מסוים יימכר בפועל.</p>
+        </section>
+    </main>
+    <footer>
+        <nav>
+            <a href="index.html">חיפוש</a>
+            <a href="how-it-works.html">איך זה עובד</a>
+            <a href="privacy.html">פרטיות</a>
+        </nav>
+        <p class="disclaimer">האתר בפיתוח. ההערכות מתוכננות להתבסס על מכירות שהסתיימו ב-eBay; כשהן יוצגו, הן יהיו הערכה סטטיסטית בלבד ולא שמאות מקצועית או הבטחה למחיר מכירה בפועל.</p>
+    </footer>
+</body>
+</html>
