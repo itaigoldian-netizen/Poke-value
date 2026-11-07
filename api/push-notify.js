@@ -32,8 +32,10 @@ export default async function handler(req, res) {
   }
 
   try {
+    // VAPID subject: the site URL itself (a contact URL is all the spec asks
+    // for); no email address is exposed for this service use.
     webpush.setVapidDetails(
-      'mailto:theisraelipokemonclub@gmail.com', // public contact address of the site
+      'https://pokevalue2.vercel.app',
       process.env.VAPID_PUBLIC_KEY,
       process.env.VAPID_PRIVATE_KEY
     );

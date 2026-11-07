@@ -199,10 +199,15 @@ button.small{padding:8px 18px;font-size:.95rem;margin:14px 12px 0 0}
                     });
                 });
             }).then(function(sub){
-                return fetch('/api/push-subscribe', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ subscription: sub })
+                // The subscribe endpoint verifies the owner's session token
+                // server-side; a visitor cannot register a subscription.
+                return sb.auth.getSession().then(function(sess){
+                    var token = sess && sess.data && sess.data.session ? sess.data.session.access_token : '';
+                    return fetch('/api/push-subscribe', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+                        body: JSON.stringify({ subscription: sub })
+                    });
                 });
             }).then(function(r){
                 if (!r.ok) throw new Error('save failed');
