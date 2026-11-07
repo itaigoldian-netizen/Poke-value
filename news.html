@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>חדשות - Poke Value</title>
+    <link rel="icon" type="image/jpeg" href="/favicon.png.jpeg">
+    <style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif;background:#f8fafc;color:#1e293b;line-height:1.7}
+header{background:#fff;border-bottom:1px solid #e2e8f0;padding:20px 16px;box-shadow:0 1px 2px rgba(0,0,0,.05)}
+header .wrap{max-width:48rem;margin:0 auto;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px}
+h1{font-size:1.5rem;font-weight:800}
+h1 span{color:#2563eb}
+nav a{color:#2563eb;text-decoration:underline;margin:0 8px;font-size:0.95rem}
+main{max-width:48rem;margin:0 auto;padding:32px 16px 48px}
+section{background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:20px 24px;margin-bottom:20px;box-shadow:0 1px 2px rgba(0,0,0,.05)}
+h2{font-size:1.2rem;font-weight:700;color:#1e293b;margin-bottom:10px}
+p{margin-bottom:10px;color:#475569}
+strong{color:#1e293b}
+footer{background:#fff;border-top:1px solid #e2e8f0;padding:24px 16px;text-align:center}
+footer .disclaimer{color:#64748b;font-size:0.85rem;max-width:40rem;margin:8px auto 0}
+footer .credit{color:#64748b;font-size:0.85rem;max-width:40rem;margin:8px auto 0}
+.updated{color:#64748b;font-size:0.85rem}
+.own-article{border-top:1px solid #e2e8f0;padding-top:16px;margin-top:16px}
+.own-article h3{font-size:1.05rem;font-weight:700;color:#1e293b;margin-bottom:4px}
+.own-article .date{color:#64748b;font-size:0.85rem;margin-bottom:8px}
+.empty-state{color:#64748b;font-style:italic}
+.news-list{display:flex;flex-direction:column;gap:10px;margin-top:6px}
+.news-item{display:block;border:1px solid #e2e8f0;border-radius:10px;padding:12px 16px;text-decoration:none;color:inherit;transition:border-color .15s,box-shadow .15s}
+.news-item:hover{border-color:#2563eb;box-shadow:0 2px 8px rgba(15,23,42,.08)}
+.news-item h3{font-size:1rem;font-weight:600;color:#1e293b;margin-bottom:4px}
+.news-item .meta{color:#64748b;font-size:0.85rem}
+.news-item .read{color:#2563eb;font-size:0.85rem;font-weight:600}
+.news-note{color:#64748b;font-size:0.85rem;margin-top:12px}
+.news-error{color:#713f12}
+    </style>
+</head>
+<body>
+    <header>
+        <div class="wrap">
+            <h1>Poke <span>Value</span></h1>
+            <nav>
+                <a href="index.html">חיפוש</a>
+                <a href="news.html">חדשות</a>
+                <a href="how-it-works.html">איך זה עובד</a>
+                <a href="about.html">אודות</a>
+                <a href="privacy.html">פרטיות</a>
+                <a href="terms.html">תנאי שימוש</a>
+                <a href="contact.html">צור קשר</a>
+            </nav>
+        </div>
+    </header>
+    <main>
+        <section>
+            <h2>הכתבות שלנו</h2>
+            <!--
+            ====================================================
+            איך מוסיפים כתבה חדשה משלכם (מדריך קצר):
+            1. למטה מופיעה "תבנית כתבה". מעתיקים רק את השורות
+               שמתחילות ב-<article ומסתיימות ב-</article>.
+            2. מדביקים אותן ממש מתחת לשורה: ARTICLES-GO-HERE
+               (ככה הן יוצאות מחוץ להערה ויופיעו באתר).
+            3. מחליפים את הכותרת, התאריך והפסקאות בתוכן שלכם.
+               אם הכתבה מבוססת על מקור חיצוני, אפשר (רצוי!)
+               להשאיר את שורת "מקור" ולהחליף את
+               הדביקו-כאן-קישור-למקור בכתובת האמיתית.
+               אם אין מקור - פשוט מוחקים את שורת המקור.
+            4. בכתבה הראשונה שמוסיפים: מוחקים את השורה
+               "עדיין לא פורסמו כתבות..." שמתחת ל-ARTICLES-GO-HERE.
+            5. שומרים את הקובץ ומעלים אותו ל-GitHub. זה הכל!
+            אפשר להדביק כמה כתבות אחת מתחת לשנייה -
+            הכתבה העליונה תמיד תופיע ראשונה.
+            ====================================================
+            -->
+            <!-- ARTICLES-GO-HERE -->
+            <p class="empty-state">עדיין לא פורסמו כתבות. כשתצא הכתבה הראשונה שלנו, היא תופיע כאן.</p>
+            <!--
+            תבנית כתבה (מעתיקים רק מ-<article> עד </article>):
+
+            <article class="own-article">
+                <h3>כותרת הכתבה שלכם</h3>
+                <p class="date">7 בנובמבר 2026</p>
+                <p>הפסקה הראשונה של הכתבה...</p>
+                <p>פסקה נוספת...</p>
+                <p>מקור: <a href="הדביקו-כאן-קישור-למקור" target="_blank" rel="noopener">שם האתר שממנו לקחתם את החדשה</a></p>
+            </article>
+            -->
+        </section>
+        <section>
+            <h2>חדשות מהעולם</h2>
+            <p>בינתיים, אפשר לעקוב אחרי חדשות משחק הקלפים באתר <a href="https://www.pokebeach.com" target="_blank" rel="noopener">PokéBeach</a> (באנגלית).</p>
+        </section>
+    </main>
+    <footer>
+        <nav>
+            <a href="index.html">חיפוש</a>
+            <a href="news.html">חדשות</a>
+            <a href="how-it-works.html">איך זה עובד</a>
+            <a href="about.html">אודות</a>
+            <a href="privacy.html">פרטיות</a>
+            <a href="terms.html">תנאי שימוש</a>
+            <a href="contact.html">צור קשר</a>
+        </nav>
+        <p class="disclaimer">האתר בפיתוח. ההערכות מתוכננות להתבסס על מכירות שהסתיימו ב-eBay; כשהן יוצגו, הן יהיו הערכה סטטיסטית בלבד ולא שמאות מקצועית או הבטחה למחיר מכירה בפועל.</p>
+        <p class="credit">נתוני ותמונות הקלפים מסופקים על ידי <a href="https://tcgdex.net" target="_blank" rel="noopener">TCGdex</a>. פוקימון ושמות הקלפים הם סימנים מסחריים של Nintendo/Creatures Inc./GAME FREAK inc.</p>
+    </footer>
+</body>
+</html>
