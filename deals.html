@@ -364,7 +364,8 @@ button.link:hover{background:#eff6ff}
                         setStatus('לא נמצאו קלפים בשם הזה. נסו שם אחר, שפה אחרת, או דיווח ידני.');
                         return;
                     }
-                    setStatus(cards.length === 1 ? 'נמצא קלף אחד:' : 'נמצאו ' + cards.length + ' קלפים - בחרו את המדויק:');
+                    var shown = Math.min(cards.length, 24);
+                    setStatus(cards.length === 1 ? 'נמצא קלף אחד:' : 'נמצאו ' + cards.length + ' קלפים - בחרו את המדויק:' + (cards.length > shown ? ' (מוצגים ' + shown + ' הראשונים; חדדו את החיפוש אם הקלף לא מופיע)' : ''));
                     return fetch(TCGDEX_API + '/' + TCGDEX_LANG[lang] + '/sets')
                         .then(function(r3){ return r3.ok ? r3.json() : []; })
                         .then(function(sets){
