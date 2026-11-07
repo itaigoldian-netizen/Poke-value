@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { fetchSales, providerKeyConfigured, providerCacheTag, resolveCardVariant } from './_sales-provider.js';
+import { fetchEasCommunityCells } from './_community-sales.js';
 
 // Per-company+grade lookup (owner-approved click model, Nov7): one request
 // serves exactly one cell. A fresh cached value (<=14 days) is served from
@@ -8,12 +9,14 @@ import { fetchSales, providerKeyConfigured, providerCacheTag, resolveCardVariant
 // grader+grade search instead of the all-graders fanout.
 //
 //   GET /api/company-price?card=<query>&language=<lang>
-//       &grader=PSA|BGS|CGC|TAG|RAW[&grade=1..10]
+//       &grader=PSA|BGS|CGC|TAG|EAS|RAW[&grade=1..10]
 //
-// EAS is deliberately NOT here (owner decision Nov7 17:36): EAS recorded
-// sales come only from this site's own deal reports, never from an external
-// fetch, so this endpoint never searches for EAS sales. EAS values appear
-// only once the on-site deal-report source is wired up and approved.
+// EAS never calls the external provider (owner decision Nov7 17:36): EAS
+// recorded sales come only from this site's approved deal reports, so the
+// EAS branch reads community_trades directly (see _community-sales.js) and
+// returns an honest no-data when no approved report matches the exact
+// printing + language + variant + grade. The EAS formula estimate stays
+// hidden: cross-company grade equivalence is not validated.
 //
 // RAW means ungraded: the search carries no grader/grade and any title that
 // mentions a grading company with a grade is filtered out, so the raw value
@@ -68,7 +71,8 @@ export default async function handler(req, res) {
 
   const graderKey = String(grader).toUpperCase();
   const isRaw = graderKey === 'RAW';
-  if (!isRaw && !GRADERS.includes(graderKey)) {
+  const isEas = graderKey === 'EAS';
+  if (!isRaw && !isEas && !GRADERS.includes(graderKey)) {
     return res.status(400).json({ error: 'Invalid grader' });
   }
   if (!LANGUAGES.includes(language)) {
@@ -90,7 +94,9 @@ export default async function handler(req, res) {
     return res.status(503).json({ error: 'Price lookup is paused' });
   }
 
-  if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY || !providerKeyConfigured()) {
+  // The provider key is only required for external-source cells: an EAS cell
+  // reads community_trades and must not fail when no provider key is set.
+  if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY || (!isEas && !providerKeyConfigured())) {
     console.error('company price lookup failed: a required environment variable is not set');
     return res.status(500).json({ error: 'Server is not configured' });
   }
@@ -107,6 +113,19 @@ export default async function handler(req, res) {
 
   try {
     const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+
+    // EAS: live read of approved community deal reports only - no provider
+    // request, no cache write (community data changes on every approval).
+    if (isEas) {
+      const { cells, error: communityError } = await fetchEasCommunityCells(supabase, String(tcg), language, variantKey);
+      if (communityError) {
+        console.error('community sales read failed: ' + errMsg(communityError));
+        return res.status(500).json({ error: 'Server is not configured' });
+      }
+      const cell = (cells || []).find(c => c.grade === gradeValue);
+      if (!cell) return res.status(404).json({ error: 'No data found' });
+      return res.status(200).json({ card_name: variantInfo.cardName, language, variant: variantKey, ...cell });
+    }
 
     // Column names match the user's actual price_cache table.
     const { data: cachedData, error: cacheReadError } = await supabase

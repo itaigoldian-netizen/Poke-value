@@ -170,7 +170,7 @@ body{font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif}
                     </table>
                 </div>
                 <p class="pv-chart-note">לחיצה על תא טוענת שווי של אותה חברה וציון ממכירות שהסתיימו בפועל. מחיר שמור מוצג עם תאריך העדכון שלו.</p>
-                <p class="pv-chart-note">כל התאים מציגים מכירות בפועל של אותה חברת דירוג. מכירות EAS מתועדות רק מדיווחי העסקאות באתר ואינן נטענות ממקור חיצוני; הערכת השווי של EAS מחושבת בנוסחה מנתוני ארבע החברות, עדיין בבדיקה ואינה מוצגת. ערך "לא מדורג" מגיע ממכירות של קלפים לא מדורגים, אך אין במקור הפרדת מצב, ולכן הוא מכסה מצבים מעורבים.</p>
+                <p class="pv-chart-note">כל התאים מציגים מכירות בפועל של אותה חברת דירוג. עמודת EAS מציגה חציון של דיווחי העסקאות שאושרו באתר, ואינה נטענת ממקור חיצוני; הערכת EAS בנוסחה מנתוני ארבע החברות עדיין בבדיקה ואינה מוצגת. ערך "לא מדורג" מגיע ממכירות של קלפים לא מדורגים, אך אין במקור הפרדת מצב, ולכן הוא מכסה מצבים מעורבים.</p>
                 <div id="historySection" class="hidden">
                     <h3 class="pv-sales-title">היסטוריית מחירים</h3>
                     <div id="historyChart" dir="ltr"></div>
@@ -606,10 +606,10 @@ body{font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif}
         // currencies; damaged/played raw copies never merge with clean raw
         // into one unqualified price.
         // MATRIX_GRADERS mirrors the backend's coverage (api/company-price.js).
-        // These are clickable lookup cells, not preloaded data. No EAS column
-        // (owner decision Nov7 17:36): EAS recorded sales come only from this
-        // site's deal reports, never from the external provider.
-        const MATRIX_GRADERS = ['PSA', 'BGS', 'CGC', 'TAG'];
+        // These are clickable lookup cells, not preloaded data. EAS leads: its
+        // values come only from this site's approved deal reports (owner
+        // decision Nov7 17:36), never from the external provider.
+        const MATRIX_GRADERS = ['EAS', 'PSA', 'BGS', 'CGC', 'TAG'];
         const cellInflight = new Set(); // repeated clicks join the same request
         let currentTcgId = ''; // exact TCGdex id of the picked card; the server verifies variants against it
 
@@ -796,13 +796,18 @@ body{font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif}
             return btn;
         }
 
-        function fillLoadedCell(btn, price, totalSales, updatedAt, isRaw) {
+        function fillLoadedCell(btn, price, totalSales, updatedAt, isRaw, currency, source) {
             const upd = updatedAt ? new Date(updatedAt) : null;
             const updTxt = upd && !isNaN(upd) ? ' · עודכן ' + upd.toLocaleDateString('he-IL', {day:'numeric', month:'numeric', year:'2-digit'}) : '';
             // Raw values must not read as clean-condition prices: the source
             // has no condition field, so the cell says the condition mix is unknown.
             const condTxt = isRaw ? '<span class="m cond">מצב לא ידוע - מכירות מעורבות</span>' : '';
-            btn.innerHTML = `<span class="p">${fmtCellPrice(price, 'USD')}</span><span class="m">${Number(totalSales) || 0} מכירות${updTxt}</span>${condTxt}`;
+            // Community (EAS) cells count approved site deal reports, not
+            // external sales, and can be in ILS - the label must say so.
+            const salesTxt = source === 'community'
+                ? (Number(totalSales) === 1 ? ' דיווח אחד באתר' : ' דיווחים באתר')
+                : ' מכירות';
+            btn.innerHTML = `<span class="p">${fmtCellPrice(price, currency || 'USD')}</span><span class="m">${Number(totalSales) || 0}${salesTxt}${updTxt}</span>${condTxt}`;
             btn.disabled = true; // a current value is already shown; no repeat fetch
         }
 
@@ -821,7 +826,7 @@ body{font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif}
                     if (!c || c.price === null || c.price === undefined || isNaN(Number(c.price))) return;
                     const btn = document.getElementById('cell-' + c.grader + '-' + c.grade);
                     if (btn && btn.disabled === false && btn.querySelector('.cta')) {
-                        fillLoadedCell(btn, c.price, c.total_sales, c.updated_at, c.grader === 'RAW');
+                        fillLoadedCell(btn, c.price, c.total_sales, c.updated_at, c.grader === 'RAW', c.currency, c.source);
                     }
                 });
             } catch { /* passive read failure: cells stay click-to-load */ }
@@ -841,7 +846,7 @@ body{font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif}
                 let data = null;
                 try { data = await response.json(); } catch (e) { data = null; }
                 if (response.ok && data && data.price !== null && data.price !== undefined && !isNaN(Number(data.price))) {
-                    fillLoadedCell(btn, data.price, data.total_sales, data.updated_at, grader === 'RAW');
+                    fillLoadedCell(btn, data.price, data.total_sales, data.updated_at, grader === 'RAW', data.currency, data.source);
                     if (Array.isArray(data.sales)) renderSales(data.sales);
                     if (Array.isArray(data.history)) renderHistory(data.history);
                 } else if (response.status === 404) {

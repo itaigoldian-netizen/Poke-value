@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { providerCacheTag, resolveCardVariant } from './_sales-provider.js';
+import { fetchEasCommunityCells } from './_community-sales.js';
 
 // Passive batch read for the click model (owner-approved Nov7): returns every
 // per-company+grade cached value for the card that is still fresh (<=14 days),
@@ -101,8 +102,19 @@ export default async function handler(req, res) {
         cached: true
       }));
 
+    // EAS cells come live from approved community deal reports (owner
+    // decision Nov7 17:36 + reports-in-valuation steering Nov7 14:06): no
+    // provider request, no cache. A community read failure never breaks the
+    // cached foreign cells - the EAS column just stays click-to-load.
+    const { cells: communityCells, error: communityError } = await fetchEasCommunityCells(supabase, String(tcg), language, variantKey);
+    if (communityError) {
+      console.error('community sales read failed: ' + errMsg(communityError));
+    } else {
+      cells.push(...communityCells);
+    }
+
     return res.status(200).json({
-      card_name: card.trim(),
+      card_name: variantInfo.cardName,
       language,
       cells
     });
