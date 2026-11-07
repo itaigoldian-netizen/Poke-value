@@ -73,6 +73,10 @@ body{font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif}
 .pv-sale .d{color:#64748b;white-space:nowrap}
 .pv-sale .t{flex:1;color:#334155;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:right}
 .pv-sale .p{font-weight:700;color:#0f172a;white-space:nowrap}
+.pv-legend{display:flex;flex-wrap:wrap;gap:12px;justify-content:center;font-size:.8rem;color:#475569;margin-top:6px}
+.pv-legend .key{display:inline-flex;align-items:center;gap:5px}
+.pv-legend .sw{width:14px;height:3px;border-radius:2px;display:inline-block}
+.pv-chart-note{font-size:.75rem;color:#94a3b8;text-align:center;margin-top:4px}
 .pv-change:hover{background:#eff6ff}
 .pv-paused{background:#f8fafc;border:1px dashed #cbd5e1;border-radius:10px;padding:14px;color:#64748b;font-size:.95rem;line-height:1.6}
 .results-table{max-width:48rem;margin:0 auto}
@@ -138,6 +142,13 @@ body{font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif}
                 <h2 id="resultTitle" class="text-2xl font-bold text-slate-800 mb-6 text-center"></h2>
                 <div id="priceCells" class="pv-cells"></div>
                 <p id="priceUpdated" class="pv-updated"></p>
+                <div id="historySection" class="hidden">
+                    <h3 class="pv-sales-title">היסטוריית מחירים</h3>
+                    <div id="historyChart" dir="ltr"></div>
+                    <div id="historyLegend" class="pv-legend"></div>
+                    <p id="historyNote" class="pv-chart-note hidden"></p>
+                    <p id="historyEmpty" class="pv-loading hidden">אין מספיק נתוני היסטוריה להצגת גרף.</p>
+                </div>
                 <h3 id="salesTitle" class="pv-sales-title hidden">מכירות אחרונות</h3>
                 <div id="salesList" class="pv-sales"></div>
             </div>
@@ -186,6 +197,11 @@ body{font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif}
         const priceUpdated = document.getElementById('priceUpdated');
         const salesTitle = document.getElementById('salesTitle');
         const salesList = document.getElementById('salesList');
+        const historySection = document.getElementById('historySection');
+        const historyChart = document.getElementById('historyChart');
+        const historyLegend = document.getElementById('historyLegend');
+        const historyNote = document.getElementById('historyNote');
+        const historyEmpty = document.getElementById('historyEmpty');
         const priceNote = document.getElementById('priceNote');
         const priceNoteCard = document.getElementById('priceNoteCard');
 
@@ -456,7 +472,13 @@ body{font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif}
         //                  price: number|null (null = no data, shown as such, never computed),
         //                  currency: "USD"|"ILS", sales_count: number,
         //                  is_estimate: boolean (true for our EAS estimate cells) }],
-        //        sales: [{ date: "YYYY-MM-DD", title, price, currency, grade_label, source }] }
+        //        sales: [{ date: "YYYY-MM-DD", title, price, currency, grade_label, source }],
+        //        history: [{ label, currency, is_estimate,
+        //                    points: [{ date: "YYYY-MM-DD", price, sales_count }] }] }
+        // history points must be real dated observations from the chosen source,
+        // never backfilled or interpolated; the current cache keeps no history,
+        // so until a source with dated sales exists the chart shows its
+        // insufficient-data state. A series never mixes currencies.
         // Cell set is fully data-driven: no grader list is hardcoded here.
         // The frontend makes one request per card instead of the old per-grade
         // fanout (10 requests). Upstream provider cost depends on the future
@@ -473,6 +495,11 @@ body{font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif}
             salesList.innerHTML = '';
             priceUpdated.textContent = '';
             salesTitle.classList.add('hidden');
+            historySection.classList.add('hidden');
+            historyChart.innerHTML = '';
+            historyLegend.innerHTML = '';
+            historyNote.classList.add('hidden');
+            historyEmpty.classList.add('hidden');
             resultsDiv.classList.remove('hidden');
             const loading = document.createElement('p');
             loading.className = 'pv-loading';
@@ -490,6 +517,89 @@ body{font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif}
             } catch {
                 loading.textContent = 'בעיית תקשורת';
             }
+        }
+
+        const HISTORY_COLORS = ['#2563eb', '#059669', '#d97706', '#dc2626', '#7c3aed', '#0891b2'];
+
+        // Price-history chart (structure only until a source with dated sales
+        // exists). Simple inline SVG: no new dependency. Estimate series are
+        // dashed; different currencies never share one axis.
+        function renderHistory(history) {
+            historySection.classList.remove('hidden');
+            const byCurrency = {};
+            history.forEach(function(s) {
+                if (!s) return;
+                const pts = (Array.isArray(s.points) ? s.points : []).filter(function(p) {
+                    return p && p.date && !isNaN(new Date(String(p.date) + 'T00:00:00')) && !isNaN(Number(p.price));
+                });
+                if (pts.length >= 2) {
+                    const cur = s.currency || 'USD';
+                    (byCurrency[cur] = byCurrency[cur] || []).push({ label: String(s.label || ''), is_estimate: !!s.is_estimate, points: pts });
+                }
+            });
+            const currencies = Object.keys(byCurrency);
+            if (!currencies.length) {
+                historyEmpty.classList.remove('hidden');
+                return;
+            }
+            const chartCurrency = currencies.sort(function(a, b) { return byCurrency[b].length - byCurrency[a].length; })[0];
+            const series = byCurrency[chartCurrency];
+            if (currencies.length > 1) {
+                historyNote.textContent = 'סדרות במטבע אחר (' + currencies.filter(function(c) { return c !== chartCurrency; }).join(', ') + ') אינן מוצגות באותו גרף.';
+                historyNote.classList.remove('hidden');
+            }
+            const W = 640, H = 240, PL = 52, PR = 12, PT = 12, PB = 30;
+            let minT = Infinity, maxT = -Infinity, minP = Infinity, maxP = -Infinity;
+            series.forEach(function(s) {
+                s.points.forEach(function(p) {
+                    const t = new Date(String(p.date) + 'T00:00:00').getTime();
+                    const v = Number(p.price);
+                    if (t < minT) minT = t;
+                    if (t > maxT) maxT = t;
+                    if (v < minP) minP = v;
+                    if (v > maxP) maxP = v;
+                });
+            });
+            if (maxT === minT) maxT = minT + 1;
+            if (maxP === minP) { maxP = minP + 1; minP = Math.max(0, minP - 1); }
+            const pad = (maxP - minP) * 0.08;
+            minP = Math.max(0, minP - pad);
+            maxP += pad;
+            const X = function(t) { return PL + (t - minT) / (maxT - minT) * (W - PL - PR); };
+            const Y = function(v) { return PT + (1 - (v - minP) / (maxP - minP)) * (H - PT - PB); };
+            const curSym = chartCurrency === 'ILS' ? '₪' : '$';
+            const fmtD = function(t) { return new Date(t).toLocaleDateString('he-IL', { day: 'numeric', month: 'numeric', year: '2-digit' }); };
+            let svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" role="img" aria-label="גרף היסטוריית מחירים">';
+            [0, 0.5, 1].forEach(function(f) {
+                const v = minP + (maxP - minP) * f;
+                const y = Y(v).toFixed(1);
+                svg += '<line x1="' + PL + '" y1="' + y + '" x2="' + (W - PR) + '" y2="' + y + '" stroke="#e2e8f0" stroke-width="1"/>';
+                svg += '<text x="' + (PL - 6) + '" y="' + (Number(y) + 3) + '" font-size="10" fill="#94a3b8" text-anchor="end">' + curSym + (Math.round(v * 100) / 100) + '</text>';
+            });
+            svg += '<text x="' + PL + '" y="' + (H - 8) + '" font-size="10" fill="#94a3b8" text-anchor="start">' + fmtD(minT) + '</text>';
+            svg += '<text x="' + (W - PR) + '" y="' + (H - 8) + '" font-size="10" fill="#94a3b8" text-anchor="end">' + fmtD(maxT) + '</text>';
+            series.forEach(function(s, i) {
+                const color = HISTORY_COLORS[i % HISTORY_COLORS.length];
+                const ptsAttr = s.points.map(function(p) {
+                    return X(new Date(String(p.date) + 'T00:00:00').getTime()).toFixed(1) + ',' + Y(Number(p.price)).toFixed(1);
+                }).join(' ');
+                svg += '<polyline points="' + ptsAttr + '" fill="none" stroke="' + color + '" stroke-width="2"' + (s.is_estimate ? ' stroke-dasharray="5 4"' : '') + '/>';
+                s.points.forEach(function(p) {
+                    svg += '<circle cx="' + X(new Date(String(p.date) + 'T00:00:00').getTime()).toFixed(1) + '" cy="' + Y(Number(p.price)).toFixed(1) + '" r="2.5" fill="' + color + '"/>';
+                });
+            });
+            svg += '</svg>';
+            historyChart.innerHTML = svg;
+            series.forEach(function(s, i) {
+                const key = document.createElement('span');
+                key.className = 'key';
+                const sw = document.createElement('span');
+                sw.className = 'sw';
+                sw.style.background = HISTORY_COLORS[i % HISTORY_COLORS.length];
+                key.appendChild(sw);
+                key.appendChild(document.createTextNode(s.label + (s.is_estimate ? ' (הערכה)' : '')));
+                historyLegend.appendChild(key);
+            });
         }
 
         function fmtCellPrice(price, currency) {
@@ -535,6 +645,7 @@ body{font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif}
                 const d = new Date(data.updated_at);
                 if (!isNaN(d)) priceUpdated.textContent = 'עודכן: ' + d.toLocaleString('he-IL', {day:'numeric', month:'long', year:'numeric', hour:'2-digit', minute:'2-digit'});
             }
+            renderHistory(Array.isArray(data.history) ? data.history : []);
             if (Array.isArray(data.sales) && data.sales.length) {
                 salesTitle.classList.remove('hidden');
                 data.sales.forEach(function(s) {
