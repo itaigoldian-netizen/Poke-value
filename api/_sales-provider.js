@@ -28,30 +28,30 @@ const LANG_PATTERNS = {
 const GRADED_TITLE = /\b(PSA|BGS|CGC|EAS|TAG|SGC|ACE)\s*-?\s*\d/i;
 
 // --- Finish/edition variant separation (owner approval Nov7 22:15:22,
-// wamid...QUMwQjNGRTc0MEVDN0Y3NzIyMzM2MUUwRDg0QUM5QjAA) ---
-// Sales of different variants of the SAME printing (1st edition vs unlimited,
-// holo vs reverse holo vs non-holo, W promo stamp) are never merged into one
-// value. The card picker offers a variant choice whenever TCGdex flags more
-// than one variant for the card; the chosen variant is part of the cache key
-// and of the sales matching below.
+// wamid...QUMwQjNGRTc0MEVDN0Y3NzIyMzM2MUUwRDg0QUM5QjAA; semantics hardened
+// per Main review Nov7 22:25) ---
+// Sales of different variants of the SAME printing are never merged into one
+// value. The authoritative source for which variants a printing really has is
+// the TCGdex card record's variants_detailed list (type/subtype/stamp per real
+// combo) - flat boolean flags and Cartesian guesses are NOT used.
 //
 // Matching rules (applied to every candidate sale title, both providers):
-// - A variant the title must positively state (marked): first-edition,
-//   reverse, holo, w-promo. A sale whose title does not say it does not count.
-// - Unlimited is the edition convention: sellers always advertise 1st
-//   edition, so an old-set title without "1st ed"/"shadowless" reads as
-//   unlimited. Titles naming either are rejected from unlimited.
-// - 'normal' (non-holo) must be positively stated too (non-holo / non holo):
-//   a title that says nothing about finish is AMBIGUOUS when the card has
-//   more than one finish, and ambiguous sales count toward no variant
-//   (owner + Main Nov7 22:15: ambiguous variant data must not produce a
-//   precise price - the cell shows 'no data' instead).
-// - 'shadowless' is not modelled as a variant anywhere: shadowless titles are
-//   rejected from every variant lookup.
-const VARIANT_TOKENS = new Set(['first-edition', 'unlimited', 'normal', 'holo', 'reverse', 'w-promo']);
+// - STRICT mode (the printing has more than one detailed entry, supported or
+//   not): every token of the variant must be POSITIVELY stated in the title.
+//   Absence of "1st edition"/"shadowless" never proves unlimited, and silence
+//   about finish never proves non-holo - an ambiguous title counts toward NO
+//   variant and the cell shows 'no data' instead of a mixed value.
+// - EXHAUSTION mode (exactly one detailed entry exists): an unmarked title
+//   can only be that variant, so it matches; a title positively naming a
+//   different variant token is excluded.
+// - 'shadowless' and any other unsupported subtype are explicit no-data
+//   variants: they are never selectable, never silently mapped to unlimited,
+//   and their titles never match any supported variant.
+const VARIANT_TOKENS = new Set(['first-edition', 'unlimited', 'holo', 'non-holo', 'reverse', 'w-promo']);
 const RE_1ST_ED = /\b1st[\s-]*(ed|edition)\b/i;
+const RE_UNLIMITED = /\bunlimited\b/i;
 const RE_SHADOWLESS = /\bshadowless\b/i;
-const RE_REVERSE = /\breverse\b/i;
+const RE_REVERSE = /\breverse[\s-]*(holo|holographic|foil)?/i;
 const RE_HOLO = /\b(holo|holographic|foil)\b/i;
 const RE_NONHOLO = /\bnon[\s-]*holo(graphic)?\b/i;
 const RE_WPROMO = /\bw[\s-]*(promo|stamp(ed)?)\b|\bwotc\s+promo\b/i;
@@ -64,45 +64,137 @@ export function normalizeVariant(raw) {
   if (!tokens.length || tokens.length > 2) return null;
   for (const t of tokens) if (!VARIANT_TOKENS.has(t)) return null;
   const editions = tokens.filter(t => t === 'first-edition' || t === 'unlimited');
+  if (editions.length > 1) return null;
   const finishes = tokens.filter(t => t !== 'first-edition' && t !== 'unlimited');
-  if (editions.length > 1 || finishes.length > 1) return null;
-  return tokens.sort().join('+');
+  return editions.concat(finishes).join('+'); // edition-first, matches variantOptionsFromDetail keys
 }
 
-// Search terms appended to the provider query for marked variants: they bias
-// the results toward the wanted variant, but the title filter below is what
-// actually decides - a sale never counts without matching it.
+// Builds the printing's real variant list from TCGdex variants_detailed.
+// Returns { options: [key...], unsupported: [label...], strict: bool }.
+// options holds only variants this site can price; unsupported holds labels
+// of variants that exist but get an explicit no-data display (shadowless and
+// other unmodelled subtypes). strict is true whenever more than one detailed
+// entry exists - supported or not - because ambiguity is then possible.
+const TYPE_TO_FINISH = { holo: 'holo', normal: 'non-holo', reverse: 'reverse', 'w-promo': 'w-promo', wpromo: 'w-promo' };
+export function variantOptionsFromDetail(detailed) {
+  if (!Array.isArray(detailed) || !detailed.length) return null; // unknown -> fail closed
+  const options = [];
+  const unsupported = [];
+  for (const e of detailed) {
+    if (!e || typeof e !== 'object') continue;
+    const finish = TYPE_TO_FINISH[String(e.type || '').toLowerCase()] || null;
+    const stamps = Array.isArray(e.stamp) ? e.stamp.map(x => String(x).toLowerCase()) : [];
+    const subtype = e.subtype ? String(e.subtype).toLowerCase() : null;
+    const firstEd = stamps.includes('1st-edition');
+    let edition = null;
+    if (subtype && subtype !== 'unlimited') {
+      // shadowless / 1999-2000-copyright / any unmodelled subtype: explicit no-data
+      unsupported.push(firstEd ? subtype + ' 1st-edition' : subtype);
+      continue;
+    }
+    if (firstEd) edition = 'first-edition';
+    else if (subtype === 'unlimited') edition = 'unlimited';
+    if (!finish) { unsupported.push(String(e.type || 'unknown')); continue; }
+    const key = edition ? edition + '+' + finish : finish;
+    if (!options.includes(key)) options.push(key);
+  }
+  return { options, unsupported: [...new Set(unsupported)], strict: detailed.length > 1 };
+}
+
+// Search terms appended to the provider query for EVERY variant token: the
+// provider's capped result pool must be narrowed toward the wanted variant
+// before the title filter below makes the final call.
 function variantQueryTerms(variantKey) {
   const terms = [];
   for (const t of variantKey.split('+')) {
     if (t === 'first-edition') terms.push('1st edition');
+    else if (t === 'unlimited') terms.push('unlimited');
+    else if (t === 'holo') terms.push('holo');
+    else if (t === 'non-holo') terms.push('non holo');
     else if (t === 'reverse') terms.push('reverse holo');
-    else if (t === 'w-promo') terms.push('promo');
+    else if (t === 'w-promo') terms.push('w promo');
   }
   return terms;
 }
 
-// Decides whether one sale title belongs to the requested variant. Every
-// marked token in the key must be stated; any marked variant NOT in the key
-// disqualifies (1st ed / reverse / w-promo); shadowless always disqualifies.
-// 'holo'/'normal' mentions do not disqualify other variants: a single-finish
-// card's sales often say "holo", and the positive rules below already gate
-// the holo/normal buckets.
-export function titleMatchesVariant(title, variantKey) {
-  if (!variantKey) return true; // single-variant card: no separation needed
-  const tokens = variantKey.split('+');
+// Positive-evidence title match. In strict mode every token must be stated;
+// in exhaustion mode only a positive contradiction disqualifies. shadowless
+// titles never match anything.
+export function titleMatchesVariant(title, variantKey, strict) {
+  if (!variantKey) return true;
   if (RE_SHADOWLESS.test(title)) return false;
-  if (!tokens.includes('first-edition') && RE_1ST_ED.test(title)) return false;
-  if (!tokens.includes('reverse') && RE_REVERSE.test(title)) return false;
-  if (!tokens.includes('w-promo') && RE_WPROMO.test(title)) return false;
-  for (const t of tokens) {
-    if (t === 'first-edition' && !RE_1ST_ED.test(title)) return false;
-    if (t === 'reverse' && !(RE_REVERSE.test(title) && RE_HOLO.test(title))) return false;
-    if (t === 'w-promo' && !RE_WPROMO.test(title)) return false;
-    if (t === 'holo' && !(RE_HOLO.test(title) && !RE_REVERSE.test(title) && !RE_NONHOLO.test(title))) return false;
-    if (t === 'normal' && !(RE_NONHOLO.test(title) && !RE_REVERSE.test(title))) return false;
+  const tokens = variantKey.split('+');
+  const hasEd = tokens.includes('first-edition');
+  const hasUnl = tokens.includes('unlimited');
+  const finish = tokens.find(t => t !== 'first-edition' && t !== 'unlimited') || null;
+  if (strict) {
+    if (hasEd && !RE_1ST_ED.test(title)) return false;
+    if (hasUnl && !RE_UNLIMITED.test(title)) return false;
+    if (hasUnl && RE_1ST_ED.test(title)) return false;
+    if (finish === 'holo' && !(RE_HOLO.test(title) && !RE_REVERSE.test(title) && !RE_NONHOLO.test(title))) return false;
+    if (finish === 'non-holo' && !RE_NONHOLO.test(title)) return false;
+    if (finish === 'reverse' && !(RE_REVERSE.test(title) && RE_HOLO.test(title))) return false;
+    if (finish === 'w-promo' && !RE_WPROMO.test(title)) return false;
+    if (!hasEd && RE_1ST_ED.test(title)) return false; // never fold 1st ed into another variant
+    return true;
   }
+  // exhaustion: only a positive contradiction disqualifies
+  if (!hasEd && RE_1ST_ED.test(title)) return false;
+  if (hasEd && !RE_1ST_ED.test(title)) return false; // a 1st-ed-only card still needs the mark
+  if (finish === 'holo' && (RE_REVERSE.test(title) || RE_NONHOLO.test(title))) return false;
+  if (finish === 'non-holo' && (RE_REVERSE.test(title) || (RE_HOLO.test(title) && !RE_NONHOLO.test(title)))) return false;
+  if (finish === 'reverse' && (RE_NONHOLO.test(title) || (RE_HOLO.test(title) && !RE_REVERSE.test(title)))) return false;
+  if (finish === 'w-promo' && (RE_REVERSE.test(title) || RE_NONHOLO.test(title) || RE_HOLO.test(title))) return false;
   return true;
+}
+
+// Server-side variant resolution (Main review Nov7 22:25): the SERVER, not
+// the UI, decides whether a variant is required and which variants a printing
+// really has, by reading the TCGdex card record itself. Unknown or missing
+// variant data fails closed: no lookup, no price, never a guess.
+const TCGDEX_LANG = { English: 'en', Japanese: 'ja', Chinese: 'zh-cn', Korean: 'ko' };
+const detailCache = new Map(); // tcg|lang -> { at, detail } (1h, per cold start)
+async function fetchTcgdexDetail(tcgId, language) {
+  const lang = TCGDEX_LANG[language];
+  if (!lang) return null;
+  const ck = tcgId + '|' + lang;
+  const hit = detailCache.get(ck);
+  if (hit && Date.now() - hit.at < 3600_000) return hit.detail;
+  try {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 4000);
+    const r = await fetch(`https://api.tcgdex.net/v2/${lang}/cards/${encodeURIComponent(tcgId)}`, { signal: ctrl.signal });
+    clearTimeout(t);
+    if (!r.ok) return null;
+    const detail = await r.json();
+    detailCache.set(ck, { at: Date.now(), detail });
+    return detail;
+  } catch { return null; }
+}
+
+// Returns { resolved, options, unsupported, strict } or { error: {status, body} }.
+export async function resolveCardVariant(tcgId, language, variantRaw) {
+  const variantKey = normalizeVariant(variantRaw);
+  if (variantRaw !== undefined && variantRaw !== '' && !variantKey) {
+    return { error: { status: 400, body: { error: 'Invalid variant' } } };
+  }
+  const detail = await fetchTcgdexDetail(tcgId, language);
+  const model = detail ? variantOptionsFromDetail(detail.variants_detailed) : null;
+  if (!model) return { error: { status: 503, body: { error: 'Variant verification unavailable' } } };
+  if (!model.options.length) {
+    return { error: { status: 404, body: { error: 'No data found', unsupported: model.unsupported } } };
+  }
+  let resolved = variantKey;
+  if (resolved) {
+    if (!model.options.includes(resolved)) {
+      return { error: { status: 400, body: { error: 'Variant does not exist for this printing', options: model.options } } };
+    }
+  } else if (model.options.length === 1) {
+    resolved = model.options[0]; // single real variant: implied, still variant-scoped
+  } else {
+    return { error: { status: 409, body: { error: 'variant_required', options: model.options, unsupported: model.unsupported } } };
+  }
+  return { resolved, options: model.options, unsupported: model.unsupported, strict: model.strict };
 }
 
 export function activeProvider() {
@@ -121,16 +213,16 @@ export function providerCacheTag() {
   return activeProvider() === 'compsapi' ? 'compsapi' : 'scraperapi';
 }
 
-export async function fetchSales(cardQuery, grader, grade, language, variantKey) {
+export async function fetchSales(cardQuery, grader, grade, language, variantKey, variantStrict) {
   if (activeProvider() === 'compsapi') {
-    return fetchCompsApiSales(cardQuery, grader, grade, language, variantKey);
+    return fetchCompsApiSales(cardQuery, grader, grade, language, variantKey, variantStrict);
   }
-  return fetchScraperApiSales(cardQuery, grader, grade, language, variantKey);
+  return fetchScraperApiSales(cardQuery, grader, grade, language, variantKey, variantStrict);
 }
 
 // --- ScraperAPI structured eBay search (original integration) ---
 
-async function fetchScraperApiSales(cardQuery, grader, grade, language, variantKey) {
+async function fetchScraperApiSales(cardQuery, grader, grade, language, variantKey, variantStrict) {
   // eBay's sold view covers roughly the last 90 days; it has no day-range parameter.
   const isRaw = grader === 'RAW';
   let searchString = isRaw ? cardQuery : `${cardQuery} ${grader} ${grade}`;
@@ -181,7 +273,7 @@ async function fetchScraperApiSales(cardQuery, grader, grade, language, variantK
       if (!exactGradeRegex.test(title)) continue;
     }
 
-    if (!titleMatchesVariant(title, variantKey)) continue;
+    if (!titleMatchesVariant(title, variantKey, variantStrict)) continue;
 
     if (p.value > 0) {
       listings.push({ price: p.value, date: null, title });
@@ -199,7 +291,7 @@ const COMPS_LANG = { English: 'en', Japanese: 'ja', Chinese: 'zh', Korean: 'ko' 
 // and we drop them again locally so a flag definition change never leaks one in.
 const COMPS_JUNK_FLAGS = new Set(['lot', 'mystery', 'sealed', 'accessory', 'replica', 'keyword_stuffing', 'not_graded_claim', 'title_missing']);
 
-async function fetchCompsApiSales(cardQuery, grader, grade, language, variantKey) {
+async function fetchCompsApiSales(cardQuery, grader, grade, language, variantKey, variantStrict) {
   const key = process.env.COMPS_API_KEY;
   if (!key) {
     throw new Error('data provider is not configured');
@@ -267,7 +359,7 @@ async function fetchCompsApiSales(cardQuery, grader, grade, language, variantKey
       if (String(c.grade || '') !== String(grade)) continue;
     }
 
-    if (!titleMatchesVariant(String(item.title || ''), variantKey)) continue;
+    if (!titleMatchesVariant(String(item.title || ''), variantKey, variantStrict)) continue;
 
     listings.push({ price: item.price, date: item.last_sold || null, title: String(item.title || '') });
   }

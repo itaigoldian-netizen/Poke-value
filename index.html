@@ -150,6 +150,7 @@ body{font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif}
                 <button id="changeCard" class="pv-change">בחירת קלף אחר</button>
                 <button id="favBtn" class="pv-change pv-fav hidden">♡ שמירה במועדפים</button>
                 <p id="favNote" class="pv-variant hidden"></p>
+                <p id="favScope" class="pv-variant hidden">המועדף נשמר ברמת הקלף, לא ברמת גרסה ספציפית.</p>
                 <p class="pv-variant">התמונה ממחישה את הקלף. מאגר התמונות לא תמיד מבחין בין וריאנטים של אותה הדפסה (למשל מהדורה ראשונה, unlimited או reverse holo), ולכן היא לא בהכרח ההדפסה המדויקת שבידכם.</p>
             </div>
         </div>
@@ -473,8 +474,9 @@ body{font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif}
             // the printing has more than one finish/edition.
             try {
                 const dr = await fetch(`${TCGDEX_API}/${TCGDEX_LANG[langAtPick]}/cards/${encodeURIComponent(card.id)}`);
-                card.variants = dr.ok ? ((await dr.json()) || {}).variants || {} : null;
-            } catch { card.variants = null; }
+                const dj = dr.ok ? ((await dr.json()) || {}) : null;
+                card.variantsDetail = dj && Array.isArray(dj.variants_detailed) ? dj.variants_detailed : null;
+            } catch { card.variantsDetail = null; }
             if (tokenAtPick !== searchToken || langAtPick !== currentLanguage) return; // stale
             card.variantKey = null;
             showPrices(card);
@@ -490,6 +492,9 @@ body{font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif}
         function updateFavButton(){
             if (!window.PokeAuth || !PokeAuth.enabled()) return;
             favBtn.classList.remove('hidden');
+            // Favorites are explicitly PRINT-LEVEL (Main review Nov7 22:25):
+            // the saved favorite never claims a specific variant.
+            document.getElementById('favScope').classList.remove('hidden');
             favBtn.textContent = favState.saved ? '♥ שמור במועדפים' : '♡ שמירה במועדפים';
             if (!PokeAuth.isSignedIn()){
                 favMsg('המועדפים שמורים למנויים. התחברו עם Google כדי לראות את האפשרות.');
@@ -606,6 +611,7 @@ body{font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif}
         // site's deal reports, never from the external provider.
         const MATRIX_GRADERS = ['PSA', 'BGS', 'CGC', 'TAG'];
         const cellInflight = new Set(); // repeated clicks join the same request
+        let currentTcgId = ''; // exact TCGdex id of the picked card; the server verifies variants against it
 
         // ===== Variant separation (owner approval Nov7 22:15) =====
         // One printing can exist in several finishes/editions (1st edition vs
@@ -618,30 +624,46 @@ body{font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif}
             'first-edition': 'מהדורה ראשונה', 'unlimited': 'Unlimited',
             'holo': 'הולו', 'non-holo': 'לא הולו', 'reverse': 'Reverse Holo', 'w-promo': 'W Promo',
         };
+        const UNSUPPORTED_LABELS = {
+            'shadowless': 'Shadowless', 'shadowless 1st-edition': 'Shadowless מהדורה ראשונה',
+            '1999-2000-copyright': '1999-2000 copyright',
+        };
         const variantRow = document.getElementById('variantRow');
 
-        function variantOptionsOf(v) {
-            if (!v) return null; // variants record unavailable -> ambiguous
-            const editions = [];
-            if (v.firstEdition) editions.push('first-edition', 'unlimited');
-            const finishes = [];
-            if (v.normal) finishes.push('non-holo');
-            if (v.holo) finishes.push('holo');
-            if (v.reverse) finishes.push('reverse');
-            if (v.wPromo) finishes.push('w-promo');
-            if (editions.length > 1 && finishes.length > 1) {
-                const out = [];
-                for (const e of editions) for (const f of finishes) out.push(e + '+' + f);
-                return out;
+        // Mirrors api/_sales-provider.js variantOptionsFromDetail exactly: the
+        // printing's real variants come from TCGdex variants_detailed combos
+        // (type/subtype/stamp), never from flat flags or a Cartesian guess.
+        function variantModelFromDetail(detailed) {
+            if (!Array.isArray(detailed) || !detailed.length) return null;
+            const TYPE_TO_FINISH = { holo: 'holo', normal: 'non-holo', reverse: 'reverse', 'w-promo': 'w-promo', wpromo: 'w-promo' };
+            const options = [];
+            const unsupported = [];
+            for (const e of detailed) {
+                if (!e || typeof e !== 'object') continue;
+                const finish = TYPE_TO_FINISH[String(e.type || '').toLowerCase()] || null;
+                const stamps = Array.isArray(e.stamp) ? e.stamp.map(x => String(x).toLowerCase()) : [];
+                const subtype = e.subtype ? String(e.subtype).toLowerCase() : null;
+                const firstEd = stamps.includes('1st-edition');
+                if (subtype && subtype !== 'unlimited') {
+                    unsupported.push(firstEd ? subtype + ' 1st-edition' : subtype);
+                    continue;
+                }
+                let edition = null;
+                if (firstEd) edition = 'first-edition';
+                else if (subtype === 'unlimited') edition = 'unlimited';
+                if (!finish) { unsupported.push(String(e.type || 'unknown')); continue; }
+                const key = edition ? edition + '+' + finish : finish;
+                if (!options.includes(key)) options.push(key);
             }
-            if (editions.length > 1) return editions;
-            if (finishes.length > 1) return finishes;
-            return []; // at most one distinct variant: no choice needed
+            return { options, unsupported: [...new Set(unsupported)] };
         }
 
         function renderVariantPicker(card) {
             variantRow.innerHTML = '';
-            if (card.variants === null) {
+            const model = card.variantsDetail ? variantModelFromDetail(card.variantsDetail) : null;
+            if (!model) {
+                // Variant flags unknown -> fail closed (Main review Nov7 22:25):
+                // no lookup path can open without verified variant data.
                 variantRow.classList.remove('hidden');
                 const note = document.createElement('span');
                 note.className = 'pv-vnote';
@@ -649,17 +671,30 @@ body{font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif}
                 variantRow.appendChild(note);
                 return { needsPick: true, blocked: true };
             }
-            const options = variantOptionsOf(card.variants);
-            if (!options || options.length <= 1) {
+            if (!model.options.length) {
+                variantRow.classList.remove('hidden');
+                const note = document.createElement('span');
+                note.className = 'pv-vnote';
+                note.textContent = 'לגרסאות של קלף זה אין כיסוי נתונים כרגע (' + model.unsupported.map(unsupportedLabelOf).join(', ') + ') - לא מוצג שווי.';
+                variantRow.appendChild(note);
+                return { needsPick: true, blocked: true };
+            }
+            if (model.options.length === 1 && !model.unsupported.length) {
+                // Exactly one real variant exists: no choice needed, but the
+                // lookup stays variant-scoped with that variant.
                 variantRow.classList.add('hidden');
+                card.variantKey = model.options[0];
                 return { needsPick: false };
             }
+            // Several real variants (or supported + unsupported ones): the
+            // user names theirs; unsupported variants are visible no-data chips.
+            if (model.options.length === 1) card.variantKey = card.variantKey || model.options[0];
             variantRow.classList.remove('hidden');
             const label = document.createElement('span');
             label.className = 'pv-vlabel';
             label.textContent = 'לקלף הזה כמה גרסאות עם שווי שונה. בחרו גרסה:';
             variantRow.appendChild(label);
-            options.forEach(function(key) {
+            model.options.forEach(function(key) {
                 const chip = document.createElement('button');
                 chip.type = 'button';
                 chip.className = 'pv-vchip' + (card.variantKey === key ? ' pv-vsel' : '');
@@ -671,7 +706,19 @@ body{font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif}
                 });
                 variantRow.appendChild(chip);
             });
+            model.unsupported.forEach(function(u) {
+                const chip = document.createElement('button');
+                chip.type = 'button';
+                chip.className = 'pv-vchip';
+                chip.disabled = true;
+                chip.textContent = unsupportedLabelOf(u) + ' - אין נתונים';
+                variantRow.appendChild(chip);
+            });
             return { needsPick: !card.variantKey };
+        }
+
+        function unsupportedLabelOf(u) {
+            return UNSUPPORTED_LABELS[u] || u;
         }
 
         function runPriceLookup(card) {
@@ -725,6 +772,7 @@ body{font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif}
                 });
                 matrixBody.appendChild(tr);
             }
+            currentTcgId = card.id || '';
             if (!pick.needsPick) preloadCachedPrices(cardQuery, card.variantKey); // passive: fills fresh cached cells only
             // RTL overflow starts at the left in some browsers; anchor the view
             // to the right so the grade column and first companies are visible.
@@ -764,7 +812,7 @@ body{font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif}
         async function preloadCachedPrices(cardQuery, variantKey) {
             try {
                 const vp = variantKey ? `&variant=${encodeURIComponent(variantKey)}` : '';
-                const response = await fetch(`/api/company-prices?card=${encodeURIComponent(cardQuery)}&language=${encodeURIComponent(currentLanguage)}${vp}`);
+                const response = await fetch(`/api/company-prices?card=${encodeURIComponent(cardQuery)}&language=${encodeURIComponent(currentLanguage)}&tcg=${encodeURIComponent(currentTcgId || '')}${vp}`);
                 if (!response.ok) return;
                 let data = null;
                 try { data = await response.json(); } catch (e) { return; }
@@ -786,7 +834,7 @@ body{font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif}
             btn.disabled = true;
             btn.innerHTML = '<span class="m">טוען...</span>';
             try {
-                let url = `/api/company-price?card=${encodeURIComponent(cardQuery)}&language=${encodeURIComponent(currentLanguage)}&grader=${encodeURIComponent(grader)}`;
+                let url = `/api/company-price?card=${encodeURIComponent(cardQuery)}&language=${encodeURIComponent(currentLanguage)}&grader=${encodeURIComponent(grader)}&tcg=${encodeURIComponent(currentTcgId || '')}`;
                 if (grader !== 'RAW') url += `&grade=${grade}`;
                 if (variantKey) url += `&variant=${encodeURIComponent(variantKey)}`;
                 const response = await fetch(url);

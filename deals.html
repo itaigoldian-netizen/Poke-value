@@ -292,27 +292,39 @@ button.link:hover{background:#eff6ff}
             'first-edition': 'מהדורה ראשונה', 'unlimited': 'Unlimited',
             'holo': 'הולו', 'non-holo': 'לא הולו', 'reverse': 'Reverse Holo', 'w-promo': 'W Promo',
         };
+        var UNSUPPORTED_LABELS = {
+            'shadowless': 'Shadowless', 'shadowless 1st-edition': 'Shadowless מהדורה ראשונה',
+            '1999-2000-copyright': '1999-2000 copyright',
+        };
+        function unsupportedLabelOf(u){ return UNSUPPORTED_LABELS[u] || u; }
         function variantLabelOf(key){
             if (key === 'unknown') return 'גרסה לא ידועה';
             return String(key || '').split('+').map(function(t){ return VARIANT_LABELS[t] || t; }).join(' · ');
         }
-        function variantOptionsOf(v){
-            if (!v) return null;
-            var editions = [];
-            if (v.firstEdition) editions.push('first-edition', 'unlimited');
-            var finishes = [];
-            if (v.normal) finishes.push('non-holo');
-            if (v.holo) finishes.push('holo');
-            if (v.reverse) finishes.push('reverse');
-            if (v.wPromo) finishes.push('w-promo');
-            if (editions.length > 1 && finishes.length > 1){
-                var out = [];
-                editions.forEach(function(e){ finishes.forEach(function(f){ out.push(e + '+' + f); }); });
-                return out;
-            }
-            if (editions.length > 1) return editions;
-            if (finishes.length > 1) return finishes;
-            return [];
+        // Mirrors the search page and server: real combos from TCGdex
+        // variants_detailed (type/subtype/stamp), never flags or guesses.
+        function variantModelFromDetail(detailed){
+            if (!Array.isArray(detailed) || !detailed.length) return null;
+            var TYPE_TO_FINISH = { holo: 'holo', normal: 'non-holo', reverse: 'reverse', 'w-promo': 'w-promo', wpromo: 'w-promo' };
+            var options = [], unsupported = [];
+            detailed.forEach(function(e){
+                if (!e || typeof e !== 'object') return;
+                var finish = TYPE_TO_FINISH[String(e.type || '').toLowerCase()] || null;
+                var stamps = Array.isArray(e.stamp) ? e.stamp.map(function(x){ return String(x).toLowerCase(); }) : [];
+                var subtype = e.subtype ? String(e.subtype).toLowerCase() : null;
+                var firstEd = stamps.indexOf('1st-edition') >= 0;
+                if (subtype && subtype !== 'unlimited'){
+                    unsupported.push(firstEd ? subtype + ' 1st-edition' : subtype);
+                    return;
+                }
+                var edition = null;
+                if (firstEd) edition = 'first-edition';
+                else if (subtype === 'unlimited') edition = 'unlimited';
+                if (!finish){ unsupported.push(String(e.type || 'unknown')); return; }
+                var key = edition ? edition + '+' + finish : finish;
+                if (options.indexOf(key) < 0) options.push(key);
+            });
+            return { options: options, unsupported: unsupported.filter(function(u, i, a){ return a.indexOf(u) === i; }) };
         }
         function renderVariantPick(){
             var box = document.getElementById('variant-pick');
@@ -331,12 +343,20 @@ button.link:hover{background:#eff6ff}
             var lbl = document.createElement('span'); lbl.className = 'vlabel';
             lbl.textContent = 'לקלף הזה כמה גרסאות עם שווי שונה. באיזו גרסה הייתה העסקה?';
             box.appendChild(lbl);
-            variantOptionsOf(pickedCard.variants).concat(['unknown']).forEach(function(key){
+            pickedCard.variantModel.options.concat(['unknown']).forEach(function(key){
                 var chip = document.createElement('button');
                 chip.type = 'button';
                 chip.className = 'vchip' + (pickedVariant === key ? ' vsel' : '');
                 chip.textContent = key === 'unknown' ? 'לא בטוח' : variantLabelOf(key);
                 chip.addEventListener('click', function(){ pickedVariant = key; renderVariantPick(); });
+                box.appendChild(chip);
+            });
+            pickedCard.variantModel.unsupported.forEach(function(u){
+                var chip = document.createElement('button');
+                chip.type = 'button';
+                chip.className = 'vchip';
+                chip.disabled = true;
+                chip.textContent = unsupportedLabelOf(u) + ' - אין נתונים';
                 box.appendChild(chip);
             });
         }
@@ -411,11 +431,13 @@ button.link:hover{background:#eff6ff}
                 return dr.ok ? dr.json() : null;
             }).then(function(detail){
                 if (!pickedCard || pickedCard.tcg_id !== tcgId) return; // stale
-                if (!detail){ variantPickState = 'failed'; pickedVariant = 'unknown'; renderVariantPick(); return; }
-                pickedCard.variants = detail.variants || {};
-                var opts = variantOptionsOf(pickedCard.variants);
-                if (!opts || opts.length <= 1){ variantPickState = 'none'; }
-                else { variantPickState = 'required'; }
+                var model = detail ? variantModelFromDetail(detail.variants_detailed) : null;
+                if (!model){ variantPickState = 'failed'; pickedVariant = 'unknown'; renderVariantPick(); return; }
+                pickedCard.variantModel = model;
+                if (!model.options.length){ variantPickState = 'failed'; pickedVariant = 'unknown'; renderVariantPick(); return; }
+                if (model.options.length > 1){ variantPickState = 'required'; }
+                else if (model.unsupported.length){ variantPickState = 'required'; pickedVariant = model.options[0]; }
+                else { variantPickState = 'none'; pickedVariant = model.options[0]; }
                 renderVariantPick();
             }).catch(function(){
                 if (!pickedCard || pickedCard.tcg_id !== tcgId) return;
@@ -543,7 +565,7 @@ button.link:hover{background:#eff6ff}
             if (!manualMode && variantPickState === 'required' && !pickedVariant){
                 err('לקלף הזה כמה גרסאות - בחרו את הגרסה, או "לא בטוח".'); return;
             }
-            var variantVal = manualMode ? null : (variantPickState === 'required' ? pickedVariant : (variantPickState === 'failed' ? 'unknown' : null));
+            var variantVal = manualMode ? null : (variantPickState === 'none' || variantPickState === 'required' ? pickedVariant : 'unknown');
 
             msgEl.textContent = 'שולח...';
             msgEl.className = 'msg ok';

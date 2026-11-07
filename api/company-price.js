@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import { fetchSales, providerKeyConfigured, providerCacheTag, normalizeVariant } from './_sales-provider.js';
+import { fetchSales, providerKeyConfigured, providerCacheTag, resolveCardVariant } from './_sales-provider.js';
 
 // Per-company+grade lookup (owner-approved click model, Nov7): one request
 // serves exactly one cell. A fresh cached value (<=14 days) is served from
@@ -30,9 +30,12 @@ const LANGUAGES = ['English', 'Japanese', 'Chinese', 'Korean'];
 const CACHE_TTL_MS = 14 * 24 * 60 * 60 * 1000;
 
 // Version-tagged cache key, separate namespace from the EAS estimate rows
-// ('s1:'). The grader is part of the key because the shared table's unique
+// ('s2:'). The grader is part of the key because the shared table's unique
 // constraint is (card_key, language, grade). Raw rows use grade 0.
-const CACHE_KEY_PREFIX = 'c1:';
+// c2: is a FRESH namespace (Main review Nov7 22:25): rows written before
+// variant separation could hold mixed-variant data, so none of them is ever
+// served again - not even for single-variant cards.
+const CACHE_KEY_PREFIX = 'c2:';
 
 function errMsg(err) {
   let m = err && err.message ? err.message : String(err);
@@ -42,27 +45,25 @@ function errMsg(err) {
   return m.replace(/https?:\/\/\S+/g, '[url]');
 }
 
-// The variant is part of the key (owner approval Nov7 22:15): a value
-// computed from mixed-variant sales is never served for a specific variant,
-// and a value stored for one variant is never served for another. Keys for
-// single-variant cards carry no suffix, so their pre-variant rows stay valid
-// (no mixing is possible there by definition).
+// The resolved variant is ALWAYS part of the key (Main review Nov7 22:25):
+// every lookup is variant-scoped, even for single-variant printings.
 function cacheKeyFor(queryKey, grader, variantKey) {
-  return CACHE_KEY_PREFIX + providerCacheTag() + ':' + queryKey + '|' + grader.toLowerCase()
-    + (variantKey ? '|v:' + variantKey : '');
+  return CACHE_KEY_PREFIX + providerCacheTag() + ':' + queryKey + '|' + grader.toLowerCase() + '|v:' + variantKey;
 }
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET');
 
-  const { card, language, grader, grade, variant } = req.query;
+  const { card, language, grader, grade, variant, tcg } = req.query;
   if (!card || !language || !grader) {
     return res.status(400).json({ error: 'Missing parameters' });
   }
-  const variantKey = normalizeVariant(variant);
-  if (variant !== undefined && variant !== '' && !variantKey) {
-    return res.status(400).json({ error: 'Invalid variant' });
+  // Server-side variant validation (Main review Nov7 22:25): the exact TCGdex
+  // card id is required so the server itself verifies which variants this
+  // printing has; the UI's picker alone is not proof.
+  if (!tcg) {
+    return res.status(400).json({ error: 'Missing parameters' });
   }
 
   const graderKey = String(grader).toUpperCase();
@@ -94,6 +95,12 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'Server is not configured' });
   }
 
+  const variantInfo = await resolveCardVariant(String(tcg), language, variant);
+  if (variantInfo.error) {
+    return res.status(variantInfo.error.status).json(variantInfo.error.body);
+  }
+  const variantKey = variantInfo.resolved;
+
   const queryKey = card.trim().toLowerCase().replace(/\s+/g, ' ');
   const cacheKey = cacheKeyFor(queryKey, graderKey, variantKey);
 
@@ -123,6 +130,7 @@ export default async function handler(req, res) {
         language: cachedData.language,
         grader: graderKey,
         grade: gradeValue,
+        variant: variantKey,
         price: cachedData.price,
         total_sales: cachedData.sample_count,
         source: 'sold',
@@ -133,7 +141,7 @@ export default async function handler(req, res) {
 
     let sales;
     try {
-      sales = await fetchSales(queryKey, graderKey, gradeValue, language, variantKey);
+      sales = await fetchSales(queryKey, graderKey, gradeValue, language, variantKey, variantInfo.strict);
     } catch (err) {
       // Message only: never log request URLs, they contain the API key.
       console.error('sales fetch failed for ' + graderKey + ' ' + gradeValue + ': ' + errMsg(err));
