@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>עסקאות הקהילה - Poke Value</title>
+    <link rel="icon" type="image/jpeg" href="/favicon.png.jpeg">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif;background:#f8fafc;color:#1e293b;line-height:1.7}
+header{background:#fff;border-bottom:1px solid #e2e8f0;padding:20px 16px;box-shadow:0 1px 2px rgba(0,0,0,.05)}
+header .wrap{max-width:48rem;margin:0 auto;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px}
+h1{font-size:1.5rem;font-weight:800}
+h1 span{color:#2563eb}
+nav a{color:#2563eb;text-decoration:underline;margin:0 8px;font-size:0.95rem}
+main{max-width:48rem;margin:0 auto;padding:32px 16px 48px}
+section{background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:20px 24px;margin-bottom:20px;box-shadow:0 1px 2px rgba(0,0,0,.05)}
+h2{font-size:1.2rem;font-weight:700;color:#1e293b;margin-bottom:10px}
+p{margin-bottom:10px;color:#475569}
+strong{color:#1e293b}
+footer{background:#fff;border-top:1px solid #e2e8f0;padding:24px 16px;text-align:center}
+footer .disclaimer{color:#64748b;font-size:0.85rem;max-width:40rem;margin:8px auto 0}
+footer .credit{color:#64748b;font-size:0.85rem;max-width:40rem;margin:8px auto 0}
+.notice{background:#fefce8;border:1px solid #fde047;color:#713f12;padding:14px 20px;border-radius:12px;font-size:.95rem}
+label{display:block;font-weight:600;color:#334155;margin:12px 0 4px;font-size:.95rem}
+input,select{width:100%;padding:10px 14px;border:1px solid #cbd5e1;border-radius:10px;font-size:1rem;font-family:inherit;text-align:right;background:#fff}
+input:focus,select:focus{outline:none;border-color:#2563eb;box-shadow:0 0 0 3px rgba(37,99,235,.15)}
+.row{display:flex;gap:12px;flex-wrap:wrap}
+.row>div{flex:1;min-width:120px}
+button{background:#2563eb;color:#fff;border:none;padding:10px 22px;border-radius:10px;font-weight:600;font-size:1rem;cursor:pointer;transition:background .15s;margin-top:14px}
+button:hover{background:#1d4ed8}
+.msg{margin-top:12px;font-weight:600}
+.msg.err{color:#b91c1c}
+.msg.ok{color:#047857}
+.trade-item{border:1px solid #e2e8f0;border-radius:10px;padding:12px 16px;margin-bottom:10px}
+.trade-item h3{font-size:1rem;font-weight:700;color:#1e293b;margin-bottom:2px}
+.trade-item .meta{color:#64748b;font-size:.85rem;margin-bottom:0}
+.trade-item .badge{display:inline-block;font-size:.8rem;font-weight:700;border-radius:999px;padding:1px 10px;margin-inline-start:8px;vertical-align:middle}
+.badge.buy{background:#ecfdf5;color:#047857;border:1px solid #a7f3d0}
+.badge.sell{background:#fff7ed;color:#c2410c;border:1px solid #fed7aa}
+.badge.grade{background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe}
+.empty-state{color:#64748b;font-style:italic}
+.hidden{display:none}
+    </style>
+</head>
+<body>
+    <header>
+        <div class="wrap">
+            <h1>Poke <span>Value</span></h1>
+            <nav>
+                <a href="index.html">חיפוש</a>
+                <a href="news.html">חדשות</a>
+                <a href="deals.html">עסקאות</a>
+                <a href="how-it-works.html">איך זה עובד</a>
+                <a href="about.html">אודות</a>
+                <a href="privacy.html">פרטיות</a>
+                <a href="terms.html">תנאי שימוש</a>
+                <a href="contact.html">צור קשר</a>
+            </nav>
+        </div>
+    </header>
+    <main>
+        <div id="cfg-notice" class="notice hidden">
+            <p><strong>ההגדרות עוד לא הוזנו.</strong> כדי להפעיל את העמוד צריך להזין בקוד שני ערכים ציבוריים מה-Supabase (Project URL ו-anon public key) - ההוראות המלאות במדריך ההתקנה.</p>
+        </div>
+        <section>
+            <h2>עסקאות הקהילה</h2>
+            <p>כאן חברי הקהילה מדווחים על עסקאות שעשו בקלפים: מה קנו או מכרו, באיזה מחיר ומתי. רוצה לדווח על עסקה שלך? מלא את הטופס למטה.</p>
+            <div class="notice">
+                <p><strong>שימו לב:</strong> הדיווחים כאן נשלחים על ידי משתמשים ומתפרסמים לאחר אישור בעל האתר, אבל אין לנו אפשרות לאמת שהעסקה התרחשה בפועל. הם מוצגים כמידע קהילתי בלבד ואינם משפיעים על הערכות המחיר באתר.</p>
+            </div>
+        </section>
+        <section>
+            <h2>עסקאות שדווחו לאחרונה</h2>
+            <div id="trades-list">
+                <p class="empty-state">טוען דיווחים...</p>
+            </div>
+        </section>
+        <section>
+            <h2>דיווח על עסקה שעשית</h2>
+            <label for="card-name">שם הקלף</label>
+            <input id="card-name" type="text" maxlength="120" placeholder="לדוגמה: Charizard Base Set">
+            <div class="row">
+                <div>
+                    <label for="direction">מה עשית?</label>
+                    <select id="direction">
+                        <option value="buy">קניתי</option>
+                        <option value="sell">מכרתי</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="price">מחיר</label>
+                    <input id="price" type="number" min="1" max="9999999" step="any" dir="ltr" placeholder="150">
+                </div>
+                <div>
+                    <label for="currency">מטבע</label>
+                    <select id="currency">
+                        <option value="ILS">ש"ח (₪)</option>
+                        <option value="USD">דולר ($)</option>
+                    </select>
+                </div>
+            </div>
+            <div class="row">
+                <div>
+                    <label for="trade-date">תאריך העסקה</label>
+                    <input id="trade-date" type="date">
+                </div>
+                <div>
+                    <label for="grader">דירוג (לא חובה)</label>
+                    <select id="grader">
+                        <option value="">לא מדורג</option>
+                        <option value="EAS">EAS</option>
+                        <option value="PSA">PSA</option>
+                        <option value="BGS">BGS</option>
+                        <option value="CGC">CGC</option>
+                        <option value="SGC">SGC</option>
+                        <option value="other">חברה אחרת</option>
+                    </select>
+                </div>
+                <div id="grade-wrap" class="hidden">
+                    <label for="grade">ציון</label>
+                    <input id="grade" type="text" maxlength="12" dir="ltr" placeholder="9.5">
+                </div>
+            </div>
+            <label for="reporter">שם לתצוגה (לא חובה - יופיע לצד הדיווח)</label>
+            <input id="reporter" type="text" maxlength="40" placeholder="לדוגמה: דן מחיפה">
+            <button id="submit-btn">שליחת דיווח</button>
+            <p id="form-msg" class="msg"></p>
+        </section>
+    </main>
+    <footer>
+        <nav>
+            <a href="index.html">חיפוש</a>
+            <a href="news.html">חדשות</a>
+            <a href="deals.html">עסקאות</a>
+            <a href="how-it-works.html">איך זה עובד</a>
+            <a href="about.html">אודות</a>
+            <a href="privacy.html">פרטיות</a>
+            <a href="terms.html">תנאי שימוש</a>
+            <a href="contact.html">צור קשר</a>
+        </nav>
+        <p class="disclaimer">האתר בפיתוח. ההערכות מתוכננות להתבסס על מכירות שהסתיימו ב-eBay; כשהן יוצגו, הן יהיו הערכה סטטיסטית בלבד ולא שמאות מקצועית או הבטחה למחיר מכירה בפועל.</p>
+        <p class="credit">נתוני ותמונות הקלפים מסופקים על ידי <a href="https://tcgdex.net" target="_blank" rel="noopener">TCGdex</a>. דיווחי העסקאות נשלחים על ידי משתמשי האתר ולא אומתו על ידינו. פוקימון ושמות הקלפים הם סימנים מסחריים של Nintendo/Creatures Inc./GAME FREAK inc.</p>
+    </footer>
+    <script>
+    (function(){
+        // שני הערכים הבאים הם ציבוריים (לא סוד) - ההגנה נאכפת ב-Supabase עצמו:
+        // כל אחד יכול לשלוח דיווח "ממתין", אבל רק בעל האתר מאשר פרסום.
+        var SUPABASE_URL = 'https://yfxsvmujskqvtlnnfvog.supabase.co';
+        var SUPABASE_ANON_KEY = 'sb_publishable_9rKl0u1M4cndyvhN4wzA0A_zbsmtFch';
+        var MAX_TRADES = 50;
+
+        function show(id){ document.getElementById(id).classList.remove('hidden'); }
+        function hide(id){ document.getElementById(id).classList.add('hidden'); }
+
+        if (SUPABASE_URL.indexOf('PASTE-') === 0 || SUPABASE_ANON_KEY.indexOf('PASTE-') === 0){
+            show('cfg-notice');
+            document.getElementById('trades-list').innerHTML = '<p class="empty-state">העמוד בהקמה - דיווחים יופיעו כאן בקרוב.</p>';
+            return;
+        }
+
+        var sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+        var GRADER_NAMES = {PSA:'PSA', BGS:'BGS', CGC:'CGC', SGC:'SGC', other:'דירוג'};
+
+        function fmtDate(iso){
+            var d = new Date(iso + 'T00:00:00');
+            return isNaN(d) ? '' : d.toLocaleDateString('he-IL', {day:'numeric', month:'long', year:'numeric'});
+        }
+
+        function fmtPrice(price, currency){
+            var n = Number(price);
+            var s = isNaN(n) ? String(price) : n.toLocaleString('he-IL');
+            return currency === 'USD' ? s + '$' : s + ' ₪';
+        }
+
+        function loadTrades(){
+            sb.from('community_trades').select('card_name,direction,price,currency,trade_date,grader,grade,reporter')
+                .eq('status', 'approved')
+                .order('trade_date', {ascending:false})
+                .order('created_at', {ascending:false})
+                .limit(MAX_TRADES)
+                .then(function(res){
+                    var box = document.getElementById('trades-list');
+                    box.innerHTML = '';
+                    if (res.error){ box.innerHTML = '<p class="empty-state">לא הצלחנו לטעון את הדיווחים כרגע.</p>'; return; }
+                    if (!res.data || !res.data.length){
+                        box.innerHTML = '<p class="empty-state">עדיין לא פורסמו דיווחים. היו הראשונים לדווח על עסקה!</p>';
+                        return;
+                    }
+                    res.data.forEach(function(t){
+                        var div = document.createElement('div');
+                        div.className = 'trade-item';
+                        var h = document.createElement('h3');
+                        h.textContent = t.card_name;
+                        var dir = document.createElement('span');
+                        dir.className = 'badge ' + (t.direction === 'sell' ? 'sell' : 'buy');
+                        dir.textContent = t.direction === 'sell' ? 'נמכר' : 'נקנה';
+                        h.appendChild(dir);
+                        if (t.grader && t.grade){
+                            var g = document.createElement('span');
+                            g.className = 'badge grade';
+                            g.textContent = (GRADER_NAMES[t.grader] || t.grader) + ' ' + t.grade;
+                            h.appendChild(g);
+                        }
+                        var meta = document.createElement('p');
+                        meta.className = 'meta';
+                        var parts = ['במחיר ' + fmtPrice(t.price, t.currency)];
+                        var d = fmtDate(t.trade_date);
+                        if (d) parts.push('ב-' + d);
+                        parts.push(t.reporter ? 'דווח על ידי ' + t.reporter : 'דיווח אנונימי');
+                        meta.textContent = parts.join(' · ');
+                        div.appendChild(h);
+                        div.appendChild(meta);
+                        box.appendChild(div);
+                    });
+                });
+        }
+
+        document.getElementById('grader').addEventListener('change', function(){
+            if (this.value){ show('grade-wrap'); } else { hide('grade-wrap'); }
+        });
+
+        document.getElementById('submit-btn').addEventListener('click', function(){
+            var cardName = document.getElementById('card-name').value.trim();
+            var direction = document.getElementById('direction').value;
+            var price = Number(document.getElementById('price').value);
+            var currency = document.getElementById('currency').value;
+            var tradeDate = document.getElementById('trade-date').value;
+            var grader = document.getElementById('grader').value;
+            var grade = document.getElementById('grade').value.trim();
+            var reporter = document.getElementById('reporter').value.trim();
+            var msgEl = document.getElementById('form-msg');
+            function err(t){ msgEl.textContent = t; msgEl.className = 'msg err'; }
+
+            if (!cardName){ err('חובה למלא את שם הקלף.'); return; }
+            if (!price || price <= 0){ err('חובה למלא מחיר חיובי.'); return; }
+            if (!tradeDate){ err('חובה לבחור את תאריך העסקה.'); return; }
+            if (tradeDate > new Date().toISOString().slice(0,10)){ err('תאריך העסקה לא יכול להיות בעתיד.'); return; }
+            if (grader && !grade){ err('בחרתם דירוג - חובה למלא גם את הציון.'); return; }
+
+            msgEl.textContent = 'שולח...';
+            msgEl.className = 'msg ok';
+            sb.from('community_trades').insert({
+                card_name: cardName,
+                direction: direction,
+                price: price,
+                currency: currency,
+                trade_date: tradeDate,
+                grader: grader || null,
+                grade: grader ? grade : null,
+                reporter: reporter || null,
+                status: 'pending'
+            }).then(function(res){
+                if (res.error){ err('השליחה נכשלה: ' + res.error.message); return; }
+                msgEl.textContent = 'הדיווח נשלח! הוא יופיע באתר לאחר אישור בעל האתר.';
+                document.getElementById('card-name').value = '';
+                document.getElementById('price').value = '';
+                document.getElementById('trade-date').value = '';
+                document.getElementById('grade').value = '';
+                document.getElementById('reporter').value = '';
+                document.getElementById('grader').value = '';
+                hide('grade-wrap');
+            });
+        });
+
+        loadTrades();
+    })();
+    </script>
+</body>
+</html>
