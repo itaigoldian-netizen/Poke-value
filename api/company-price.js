@@ -66,7 +66,7 @@ export default async function handler(req, res) {
 
   let gradeValue = 0;
   if (!isRaw) {
-    const parsedGrade = parseInt(grade, 10);
+    const parsedGrade = Number(grade); // '9.5' and 'abc' are not valid integer grades
     if (!Number.isInteger(parsedGrade) || parsedGrade < 1 || parsedGrade > 10) {
       return res.status(400).json({ error: 'Invalid grade' });
     }

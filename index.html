@@ -62,7 +62,8 @@ body{font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif}
 .pv-matrix{border-collapse:collapse;width:100%;min-width:560px}
 .pv-matrix th{font-size:.85rem;font-weight:700;color:#475569;padding:6px 4px;border-bottom:1px solid #e2e8f0;text-align:center}
 .pv-matrix td{padding:3px;border-bottom:1px solid #f1f5f9;text-align:center}
-.pv-grade-lbl{font-weight:700;color:#334155;font-size:.85rem;white-space:nowrap}
+.pv-grade-lbl{font-weight:700;color:#334155;font-size:.85rem;white-space:nowrap;position:sticky;right:0;background:#fff;z-index:2;box-shadow:-4px 0 6px -4px rgba(15,23,42,.15)}
+.pv-matrix thead th:first-child{position:sticky;right:0;background:#fff;z-index:3}
 .pv-gcell{display:block;width:100%;background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:6px 4px;cursor:pointer;transition:border-color .15s;font-family:inherit}
 .pv-gcell:hover:not(:disabled){border-color:#2563eb}
 .pv-gcell:disabled{cursor:default}
@@ -72,6 +73,7 @@ body{font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif}
 .pv-gcell .m{font-size:.7rem;color:#64748b;margin-top:1px}
 .pv-gcell .nodata{font-size:.78rem;color:#94a3b8;font-weight:600;padding:4px 0}
 .pv-gcell .err{font-size:.72rem;color:#b91c1c}
+.pv-gcell .cond{color:#92400e}
 .pv-loading{color:#64748b;text-align:center}
 .pv-sales-title{font-size:1.05rem;font-weight:700;color:#1e293b;margin:16px 0 4px}
 .pv-sale{display:flex;justify-content:space-between;gap:10px;border-bottom:1px solid #f1f5f9;padding:8px 4px;font-size:.9rem}
@@ -145,13 +147,14 @@ body{font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif}
             </div>
             <div id="results" class="hidden bg-white border border-slate-200 rounded-xl shadow-sm p-6">
                 <h2 id="resultTitle" class="text-2xl font-bold text-slate-800 mb-6 text-center"></h2>
-                <div class="pv-matrix-wrap">
+                <div class="pv-matrix-wrap" id="matrixWrap">
                     <table class="pv-matrix">
                         <thead id="matrixHead"></thead>
                         <tbody id="matrixBody"></tbody>
                     </table>
                 </div>
                 <p class="pv-chart-note">לחיצה על תא טוענת שווי של אותה חברה וציון ממכירות שהסתיימו בפועל. מחיר שמור מוצג עם תאריך העדכון שלו.</p>
+                <p class="pv-chart-note">כל התאים, כולל EAS, מציגים מכירות בפועל של אותה חברה. הערכת השווי המשוקללת של Poke Value עדיין בבדיקה ואינה מוצגת. ערך "לא מדורג" מגיע ממכירות של קלפים לא מדורגים, אך אין במקור הפרדת מצב, ולכן הוא מכסה מצבים מעורבים.</p>
                 <div id="historySection" class="hidden">
                     <h3 class="pv-sales-title">היסטוריית מחירים</h3>
                     <div id="historyChart" dir="ltr"></div>
@@ -565,6 +568,10 @@ body{font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif}
                 matrixBody.appendChild(tr);
             }
             preloadCachedPrices(cardQuery); // passive: fills fresh cached cells only
+            // RTL overflow starts at the left in some browsers; anchor the view
+            // to the right so the grade column and first companies are visible.
+            const mw = document.getElementById('matrixWrap');
+            if (mw) mw.scrollLeft = 0;
         }
 
         function makeCell(cardQuery, grader, grade) {
@@ -577,10 +584,13 @@ body{font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif}
             return btn;
         }
 
-        function fillLoadedCell(btn, price, totalSales, updatedAt) {
+        function fillLoadedCell(btn, price, totalSales, updatedAt, isRaw) {
             const upd = updatedAt ? new Date(updatedAt) : null;
             const updTxt = upd && !isNaN(upd) ? ' · עודכן ' + upd.toLocaleDateString('he-IL', {day:'numeric', month:'numeric', year:'2-digit'}) : '';
-            btn.innerHTML = `<span class="p">${fmtCellPrice(price, 'USD')}</span><span class="m">${Number(totalSales) || 0} מכירות${updTxt}</span>`;
+            // Raw values must not read as clean-condition prices: the source
+            // has no condition field, so the cell says the condition mix is unknown.
+            const condTxt = isRaw ? '<span class="m cond">מצב לא ידוע - מכירות מעורבות</span>' : '';
+            btn.innerHTML = `<span class="p">${fmtCellPrice(price, 'USD')}</span><span class="m">${Number(totalSales) || 0} מכירות${updTxt}</span>${condTxt}`;
             btn.disabled = true; // a current value is already shown; no repeat fetch
         }
 
@@ -598,7 +608,7 @@ body{font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif}
                     if (!c || c.price === null || c.price === undefined || isNaN(Number(c.price))) return;
                     const btn = document.getElementById('cell-' + c.grader + '-' + c.grade);
                     if (btn && btn.disabled === false && btn.querySelector('.cta')) {
-                        fillLoadedCell(btn, c.price, c.total_sales, c.updated_at);
+                        fillLoadedCell(btn, c.price, c.total_sales, c.updated_at, c.grader === 'RAW');
                     }
                 });
             } catch { /* passive read failure: cells stay click-to-load */ }
@@ -617,7 +627,7 @@ body{font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif}
                 let data = null;
                 try { data = await response.json(); } catch (e) { data = null; }
                 if (response.ok && data && data.price !== null && data.price !== undefined && !isNaN(Number(data.price))) {
-                    fillLoadedCell(btn, data.price, data.total_sales, data.updated_at);
+                    fillLoadedCell(btn, data.price, data.total_sales, data.updated_at, grader === 'RAW');
                     if (Array.isArray(data.sales)) renderSales(data.sales);
                     if (Array.isArray(data.history)) renderHistory(data.history);
                 } else if (response.status === 404) {
