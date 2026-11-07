@@ -7,6 +7,7 @@
     <title>ניהול כתבות - Poke Value</title>
     <link rel="icon" type="image/jpeg" href="/favicon.png.jpeg">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="auth.js"></script>
     <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif;background:#f8fafc;color:#1e293b;line-height:1.7}
@@ -68,7 +69,8 @@ button.small{padding:8px 18px;font-size:.95rem;margin:14px 12px 0 0}
         </div>
         <section id="login-box" class="hidden">
             <h2>התחברות מנהל</h2>
-            <p>העמוד הזה מיועד לבעל האתר בלבד.</p>
+            <p>העמוד הזה מיועד לבעל האתר ולמנהלים שמונה על ידו.</p>
+            <p id="google-login-wrap" class="hidden"><button id="google-login-btn" type="button">התחברות עם Google</button></p>
             <label for="email">אימייל</label>
             <input id="email" type="email" dir="ltr" autocomplete="username">
             <label for="password">סיסמה</label>
@@ -135,6 +137,18 @@ button.small{padding:8px 18px;font-size:.95rem;margin:14px 12px 0 0}
         function fmtDate(iso){
             var d = new Date(iso);
             return isNaN(d) ? '' : d.toLocaleDateString('he-IL', {day:'numeric', month:'long', year:'numeric'});
+        }
+
+        function gateAndShow(){
+            sb.rpc('is_admin').then(function(res){
+                if (!res || res.data !== true){
+                    msg('login-msg', 'אין לחשבון זה הרשאת מנהל.', false);
+                    sb.auth.signOut();
+                    show('login-box');
+                    return;
+                }
+                showEditor();
+            });
         }
 
         function showEditor(){
@@ -359,7 +373,7 @@ button.small{padding:8px 18px;font-size:.95rem;margin:14px 12px 0 0}
                 password: document.getElementById('password').value
             }).then(function(res){
                 if (res.error){ msg('login-msg', 'ההתחברות נכשלה: ' + res.error.message, false); return; }
-                showEditor();
+                gateAndShow();
             });
         });
 
@@ -392,8 +406,16 @@ button.small{padding:8px 18px;font-size:.95rem;margin:14px 12px 0 0}
         });
 
         // בדיקת מושב קיים (התחברות נשמרת בדפדפן)
+        // Google sign-in for delegated admins (dormant until auth activation)
+        if (window.PokeAuth && PokeAuth.enabled()){
+            show('google-login-wrap');
+            document.getElementById('google-login-btn').addEventListener('click', function(){
+                sb.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: location.origin + location.pathname } });
+            });
+        }
+
         sb.auth.getSession().then(function(res){
-            if (res.data && res.data.session){ showEditor(); }
+            if (res.data && res.data.session){ gateAndShow(); }
             else { show('login-box'); }
         });
     })();

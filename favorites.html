@@ -76,7 +76,7 @@ button.btn.link:hover{background:#eff6ff}
             <div id="adminList"></div>
             <div class="admin-add">
                 <input id="adminIdInput" type="text" placeholder="מזהה המשתמש (UUID) של המנהל החדש" dir="ltr">
-                <input id="adminNoteInput" type="text" placeholder="שם או הערה (לא חובה)">
+                <input id="adminNoteInput" type="text" placeholder="שם או הערה (לא חובה, הערה אישית בלבד)">
                 <button id="adminAddBtn" class="btn">הוספת מנהל</button>
             </div>
             <p id="adminMsg" class="empty-state"></p>
@@ -227,11 +227,16 @@ button.btn.link:hover{background:#eff6ff}
                     msg.textContent = 'יש להזין מזהה משתמש (UUID) תקין - המתנהל שולח אותו לך מעמוד המועדפים שלו.';
                     return;
                 }
+                var note = noteInput.value.trim();
+                if (!confirm('להוסיף מנהל עם מזהה:\n' + uid + (note ? '\nהערה: ' + note + ' (הערה אישית בלבד, לא זהות מאומתת)' : '') + '\n\nודא שהמזהה הגיע מהאדם עצמו.')) return;
                 addBtn.disabled = true;
-                sb.from('app_admins').insert({ user_id: uid, note: noteInput.value.trim() || null })
+                sb.from('app_admins').insert({ user_id: uid, note: note || null })
                     .then(function(res){
                         addBtn.disabled = false;
-                        if (res && res.error){ msg.textContent = 'שגיאה בהוספה: ' + res.error.message; return; }
+                        if (res && res.error){
+                            msg.textContent = 'ההוספה נכשלה: ' + res.error.message + ' - ייתכן שהמזהה עוד לא רשום (המתנהל צריך להתחבר פעם אחת לפני המינוי).';
+                            return;
+                        }
                         idInput.value = ''; noteInput.value = '';
                         msg.textContent = 'המנהל נוסף.';
                         loadAdmins();
