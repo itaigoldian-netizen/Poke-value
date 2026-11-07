@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex">
+    <title>ניהול כתבות - Poke Value</title>
+    <link rel="icon" type="image/jpeg" href="/favicon.png.jpeg">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif;background:#f8fafc;color:#1e293b;line-height:1.7}
+header{background:#fff;border-bottom:1px solid #e2e8f0;padding:20px 16px;box-shadow:0 1px 2px rgba(0,0,0,.05)}
+header .wrap{max-width:48rem;margin:0 auto;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px}
+h1{font-size:1.5rem;font-weight:800}
+h1 span{color:#2563eb}
+nav a{color:#2563eb;text-decoration:underline;margin:0 8px;font-size:0.95rem}
+main{max-width:48rem;margin:0 auto;padding:32px 16px 48px}
+section{background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:20px 24px;margin-bottom:20px;box-shadow:0 1px 2px rgba(0,0,0,.05)}
+h2{font-size:1.2rem;font-weight:700;color:#1e293b;margin-bottom:10px}
+p{margin-bottom:10px;color:#475569}
+label{display:block;font-weight:600;color:#334155;margin:12px 0 4px;font-size:.95rem}
+input,textarea{width:100%;padding:10px 14px;border:1px solid #cbd5e1;border-radius:10px;font-size:1rem;font-family:inherit;text-align:right}
+input:focus,textarea:focus{outline:none;border-color:#2563eb;box-shadow:0 0 0 3px rgba(37,99,235,.15)}
+textarea{min-height:140px;resize:vertical}
+button{background:#2563eb;color:#fff;border:none;padding:10px 22px;border-radius:10px;font-weight:600;font-size:1rem;cursor:pointer;transition:background .15s;margin-top:14px}
+button:hover{background:#1d4ed8}
+button.link{background:#fff;border:1px solid #2563eb;color:#2563eb;padding:8px 18px;margin:14px 12px 0 0;font-size:.95rem;font-weight:600;border-radius:10px;cursor:pointer;text-decoration:none;transition:background .15s}
+button.link:hover{background:#eff6ff}
+button.link.danger{border-color:#dc2626;color:#dc2626}
+button.link.danger:hover{background:#fef2f2}
+button.small{padding:8px 18px;font-size:.95rem;margin:14px 12px 0 0}
+.msg{margin-top:12px;font-weight:600}
+.msg.err{color:#b91c1c}
+.msg.ok{color:#047857}
+.notice{background:#fefce8;border:1px solid #fde047;color:#713f12;padding:14px 20px;border-radius:12px}
+.article-item{border:1px solid #e2e8f0;border-radius:10px;padding:12px 16px;margin-bottom:10px}
+.article-item h3{font-size:1rem;font-weight:700;color:#1e293b;margin-bottom:4px}
+.article-item .date{color:#64748b;font-size:.85rem}
+.hidden{display:none}
+    </style>
+</head>
+<body>
+    <header>
+        <div class="wrap">
+            <h1>Poke <span>Value</span></h1>
+            <nav>
+                <a href="index.html">חיפוש</a>
+                <a href="news.html">חדשות</a>
+                <a href="deals.html">עסקאות</a>
+                <a href="how-it-works.html">איך זה עובד</a>
+                <a href="about.html">אודות</a>
+                <a href="privacy.html">פרטיות</a>
+                <a href="terms.html">תנאי שימוש</a>
+                <a href="contact.html">צור קשר</a>
+            </nav>
+        </div>
+    </header>
+    <main>
+        <!-- ============================================================
+             הגדרות חיבור (מילוי חד-פעמי, שני ערכים ציבוריים - לא סיסמאות):
+             1. במסך ה-Supabase: Project Settings -> Data API -> Project URL
+             2. Project Settings -> API Keys -> anon public
+             מחליפים את שני הערכים למטה, שומרים ומעלים ל-GitHub.
+             ============================================================ -->
+        <div id="cfg-notice" class="notice hidden">
+            <p><strong>ההגדרות עוד לא הוזנו.</strong> כדי להפעיל את העמוד צריך להזין בקוד שני ערכים ציבוריים מה-Supabase (Project URL ו-anon public key) - ההוראות המלאות במדריך ההתקנה.</p>
+        </div>
+        <section id="login-box" class="hidden">
+            <h2>התחברות מנהל</h2>
+            <p>העמוד הזה מיועד לבעל האתר בלבד.</p>
+            <label for="email">אימייל</label>
+            <input id="email" type="email" dir="ltr" autocomplete="username">
+            <label for="password">סיסמה</label>
+            <input id="password" type="password" dir="ltr" autocomplete="current-password">
+            <button id="login-btn">התחברות</button>
+            <p id="login-msg" class="msg"></p>
+        </section>
+        <section id="editor-box" class="hidden">
+            <h2>כתבה חדשה</h2>
+            <label for="title">כותרת</label>
+            <input id="title" type="text">
+            <label for="body">תוכן הכתבה (שורה ריקה בין פסקאות)</label>
+            <textarea id="body"></textarea>
+            <label for="source-name">שם המקור (לא חובה)</label>
+            <input id="source-name" type="text" placeholder="לדוגמה: PokéBeach">
+            <label for="source-url">קישור למקור (לא חובה)</label>
+            <input id="source-url" type="url" dir="ltr" placeholder="https://...">
+            <button id="publish-btn">פרסום</button>
+            <button id="logout-btn" class="link">התנתקות</button>
+            <p id="pub-msg" class="msg"></p>
+        </section>
+        <section id="list-box" class="hidden">
+            <h2>כתבות שפורסמו</h2>
+            <div id="articles-list"></div>
+        </section>
+        <section id="pending-box" class="hidden">
+            <h2>דיווחי עסקאות ממתינים לאישור</h2>
+            <p>דיווחים שגולשים שלחו בעמוד "עסקאות הקהילה". רק דיווחים שתאשרו יופיעו באתר.</p>
+            <div id="pending-list"></div>
+        </section>
+        <section id="approved-box" class="hidden">
+            <h2>עסקאות מאושרות</h2>
+            <div id="approved-list"></div>
+        </section>
+    </main>
+    <script>
+    (function(){
+        // שני הערכים הבאים הם ציבוריים (לא סוד) - ההגנה על הכתיבה נאכפת ב-Supabase עצמו
+        var SUPABASE_URL = 'https://yfxsvmujskqvtlnnfvog.supabase.co';
+        var SUPABASE_ANON_KEY = 'sb_publishable_9rKl0u1M4cndyvhN4wzA0A_zbsmtFch';
+
+        function show(id){ document.getElementById(id).classList.remove('hidden'); }
+        function hide(id){ document.getElementById(id).classList.add('hidden'); }
+
+        if (SUPABASE_URL.indexOf('PASTE-') === 0 || SUPABASE_ANON_KEY.indexOf('PASTE-') === 0){
+            show('cfg-notice');
+            return;
+        }
+
+        var sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+        function msg(id, text, ok){
+            var el = document.getElementById(id);
+            el.textContent = text;
+            el.className = 'msg ' + (ok ? 'ok' : 'err');
+        }
+
+        function fmtDate(iso){
+            var d = new Date(iso);
+            return isNaN(d) ? '' : d.toLocaleDateString('he-IL', {day:'numeric', month:'long', year:'numeric'});
+        }
+
+        function showEditor(){
+            hide('login-box');
+            show('editor-box');
+            show('list-box');
+            show('pending-box');
+            show('approved-box');
+            loadArticles();
+            loadTrades();
+        }
+
+        var GRADER_NAMES = {EAS:'EAS', PSA:'PSA', BGS:'BGS', CGC:'CGC', SGC:'SGC', other:'דירוג'};
+
+        function fmtPrice(price, currency){
+            var n = Number(price);
+            var s = isNaN(n) ? String(price) : n.toLocaleString('he-IL');
+            return currency === 'USD' ? s + '$' : s + ' ₪';
+        }
+
+        function fmtTradeDate(iso){
+            var d = new Date(iso + 'T00:00:00');
+            return isNaN(d) ? '' : d.toLocaleDateString('he-IL', {day:'numeric', month:'long', year:'numeric'});
+        }
+
+        function describeTrade(t){
+            var parts = [t.direction === 'sell' ? 'מכירה' : 'קנייה', 'במחיר ' + fmtPrice(t.price, t.currency)];
+            var d = fmtTradeDate(t.trade_date);
+            if (d) parts.push('ב-' + d);
+            if (t.grader && t.grade) parts.push((GRADER_NAMES[t.grader] || t.grader) + ' ' + t.grade);
+            parts.push(t.reporter ? 'דווח על ידי ' + t.reporter : 'דיווח אנונימי');
+            return parts.join(' · ');
+        }
+
+        function tradeItem(t, actions){
+            var div = document.createElement('div');
+            div.className = 'article-item';
+            var h = document.createElement('h3');
+            h.textContent = t.card_name;
+            var d = document.createElement('p');
+            d.className = 'date';
+            d.textContent = describeTrade(t);
+            div.appendChild(h);
+            div.appendChild(d);
+            actions.forEach(function(a){ div.appendChild(a); });
+            return div;
+        }
+
+        function loadTrades(){
+            sb.from('community_trades').select('id,card_name,direction,price,currency,trade_date,grader,grade,reporter,status')
+                .order('created_at', {ascending:false})
+                .then(function(res){
+                    var pendingBox = document.getElementById('pending-list');
+                    var approvedBox = document.getElementById('approved-list');
+                    pendingBox.innerHTML = '';
+                    approvedBox.innerHTML = '';
+                    if (res.error){ pendingBox.textContent = 'שגיאה בטעינת הדיווחים.'; return; }
+                    var pending = (res.data || []).filter(function(t){ return t.status === 'pending'; });
+                    var approved = (res.data || []).filter(function(t){ return t.status === 'approved'; });
+                    if (!pending.length){ pendingBox.textContent = 'אין דיווחים ממתינים.'; }
+                    if (!approved.length){ approvedBox.textContent = 'עוד לא אושרו דיווחים.'; }
+                    pending.forEach(function(t){
+                        var approve = document.createElement('button');
+                        approve.className = 'small';
+                        approve.textContent = 'אישור';
+                        approve.addEventListener('click', function(){
+                            sb.from('community_trades').update({status:'approved'}).eq('id', t.id).then(function(r){
+                                if (r.error){ alert('האישור נכשל: ' + r.error.message); return; }
+                                loadTrades();
+                            });
+                        });
+                        var reject = document.createElement('button');
+                        reject.className = 'link danger';
+                        reject.textContent = 'דחייה';
+                        reject.addEventListener('click', function(){
+                            if (!confirm('לדחות ולמחוק את הדיווח על "' + t.card_name + '"?')) return;
+                            sb.from('community_trades').delete().eq('id', t.id).then(function(r){
+                                if (r.error){ alert('המחיקה נכשלה: ' + r.error.message); return; }
+                                loadTrades();
+                            });
+                        });
+                        pendingBox.appendChild(tradeItem(t, [approve, reject]));
+                    });
+                    approved.forEach(function(t){
+                        var del = document.createElement('button');
+                        del.className = 'link danger';
+                        del.textContent = 'מחיקה';
+                        del.addEventListener('click', function(){
+                            if (!confirm('למחוק מהאתר את הדיווח על "' + t.card_name + '"?')) return;
+                            sb.from('community_trades').delete().eq('id', t.id).then(function(r){
+                                if (r.error){ alert('המחיקה נכשלה: ' + r.error.message); return; }
+                                loadTrades();
+                            });
+                        });
+                        approvedBox.appendChild(tradeItem(t, [del]));
+                    });
+                });
+        }
+
+        function loadArticles(){
+            sb.from('articles').select('id,title,published_at').order('published_at', {ascending:false})
+                .then(function(res){
+                    var box = document.getElementById('articles-list');
+                    box.innerHTML = '';
+                    if (res.error){ box.textContent = 'שגיאה בטעינת הכתבות.'; return; }
+                    if (!res.data || !res.data.length){ box.textContent = 'עוד לא פורסמו כתבות.'; return; }
+                    res.data.forEach(function(a){
+                        var div = document.createElement('div');
+                        div.className = 'article-item';
+                        var h = document.createElement('h3');
+                        h.textContent = a.title;
+                        var d = document.createElement('p');
+                        d.className = 'date';
+                        d.textContent = fmtDate(a.published_at);
+                        var del = document.createElement('button');
+                        del.className = 'link danger';
+                        del.textContent = 'מחיקה';
+                        del.addEventListener('click', function(){
+                            if (!confirm('למחוק את הכתבה "' + a.title + '"?')) return;
+                            sb.from('articles').delete().eq('id', a.id).then(function(r){
+                                if (r.error){ alert('המחיקה נכשלה: ' + r.error.message); return; }
+                                loadArticles();
+                            });
+                        });
+                        div.appendChild(h);
+                        div.appendChild(d);
+                        div.appendChild(del);
+                        box.appendChild(div);
+                    });
+                });
+        }
+
+        document.getElementById('login-btn').addEventListener('click', function(){
+            msg('login-msg', 'מתחבר...', true);
+            sb.auth.signInWithPassword({
+                email: document.getElementById('email').value.trim(),
+                password: document.getElementById('password').value
+            }).then(function(res){
+                if (res.error){ msg('login-msg', 'ההתחברות נכשלה: ' + res.error.message, false); return; }
+                showEditor();
+            });
+        });
+
+        document.getElementById('logout-btn').addEventListener('click', function(){
+            sb.auth.signOut().then(function(){ location.reload(); });
+        });
+
+        document.getElementById('publish-btn').addEventListener('click', function(){
+            var title = document.getElementById('title').value.trim();
+            var body = document.getElementById('body').value.trim();
+            var srcName = document.getElementById('source-name').value.trim();
+            var srcUrl = document.getElementById('source-url').value.trim();
+            if (!title || !body){ msg('pub-msg', 'חובה למלא כותרת ותוכן.', false); return; }
+            if (srcUrl && !/^https:\/\//i.test(srcUrl)){ msg('pub-msg', 'הקישור למקור חייב להתחיל ב-https://', false); return; }
+            msg('pub-msg', 'מפרסם...', true);
+            sb.from('articles').insert({
+                title: title,
+                body: body,
+                source_name: srcName || null,
+                source_url: srcUrl || null
+            }).then(function(res){
+                if (res.error){ msg('pub-msg', 'הפרסום נכשל: ' + res.error.message, false); return; }
+                msg('pub-msg', 'הכתבה פורסמה! היא מופיעה עכשיו בעמוד החדשות.', true);
+                document.getElementById('title').value = '';
+                document.getElementById('body').value = '';
+                document.getElementById('source-name').value = '';
+                document.getElementById('source-url').value = '';
+                loadArticles();
+            });
+        });
+
+        // בדיקת מושב קיים (התחברות נשמרת בדפדפן)
+        sb.auth.getSession().then(function(res){
+            if (res.data && res.data.session){ showEditor(); }
+            else { show('login-box'); }
+        });
+    })();
+    </script>
+</body>
+</html>
