@@ -472,9 +472,15 @@ body{font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif}
         //                  price: number|null (null = no data, shown as such, never computed),
         //                  currency: "USD"|"ILS", sales_count: number,
         //                  is_estimate: boolean (true for our EAS estimate cells) }],
-        //        sales: [{ date: "YYYY-MM-DD", title, price, currency, grade_label, source }],
+        //        sales: [{ date: "YYYY-MM-DD", title, price, currency, grade_label, condition, source }],
         //        history: [{ label, currency, is_estimate,
         //                    points: [{ date: "YYYY-MM-DD", price, sales_count }] }] }
+        // Raw (ungraded) values come from actual ungraded sales only, never
+        // inferred from graded prices; a raw cell with no coverage stays
+        // "אין נתונים". Condition stays comparable: damaged/played raw copies
+        // must not merge with clean raw into one unqualified price - the
+        // backend emits condition-qualified cells (e.g. "לא מדורג (Played)")
+        // when conditions differ, and sales entries carry `condition`.
         // history points must be real dated observations from the chosen source,
         // never backfilled or interpolated; the current cache keeps no history,
         // so until a source with dated sales exists the chart shows its
@@ -665,7 +671,7 @@ body{font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif}
                     d.textContent = isNaN(dt) ? '' : dt.toLocaleDateString('he-IL', {day:'numeric', month:'numeric', year:'numeric'});
                     const t = document.createElement('span');
                     t.className = 't';
-                    t.textContent = (s.grade_label ? s.grade_label + ' · ' : '') + String(s.title || '');
+                    t.textContent = (s.grade_label ? s.grade_label + ' · ' : '') + (s.condition ? String(s.condition) + ' · ' : '') + String(s.title || '');
                     const p = document.createElement('span');
                     p.className = 'p';
                     p.textContent = fmtCellPrice(s.price, s.currency);
