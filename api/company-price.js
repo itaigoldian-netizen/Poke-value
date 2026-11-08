@@ -45,6 +45,19 @@ const CACHE_TTL_MS = 14 * 24 * 60 * 60 * 1000;
 // were always means and stay valid, so their cache is kept.
 const CACHE_KEY_PREFIX = 'c4:';
 const RAW_CACHE_KEY_PREFIX = 'c5:';
+// c6: (Nov8 18:02, owner: special grades) re-keys foreign grade-10 rows: c4
+// normal-10 rows may mix positively labeled special grades (CGC pristine, BGS
+// black label). Grades 1-9 are unaffected and keep c4.
+const TEN_CACHE_KEY_PREFIX = 'c6:';
+
+// Special-grade tokens (owner request Nov8 18:02): separate cells above a
+// regular 10, never mixed into normal-10 cells or the EAS formula. Stored as
+// synthetic grade codes so cache rows stay separate under the table's
+// (card_key, language, grade) constraint; the provider still sees grade 10.
+const SPECIAL_GRADES = {
+  pristine10: { grader: 'CGC', grade: 10, label: 'pristine', code: 101 },
+  blacklabel: { grader: 'BGS', grade: 10, label: 'black label', code: 102 }
+};
 
 function errMsg(err) {
   let m = err && err.message ? err.message : String(err);
@@ -56,8 +69,9 @@ function errMsg(err) {
 
 // The resolved variant is ALWAYS part of the key (Main review Nov7 22:25):
 // every lookup is variant-scoped, even for single-variant printings.
-function cacheKeyFor(queryKey, grader, variantKey) {
-  const prefix = grader === 'RAW' ? RAW_CACHE_KEY_PREFIX : CACHE_KEY_PREFIX;
+function cacheKeyFor(queryKey, grader, variantKey, gradeValue) {
+  const prefix = grader === 'RAW' ? RAW_CACHE_KEY_PREFIX
+    : (gradeValue === 10 || gradeValue > 100 ? TEN_CACHE_KEY_PREFIX : CACHE_KEY_PREFIX);
   return prefix + providerCacheTag() + ':' + queryKey + '|' + grader.toLowerCase() + '|v:' + variantKey;
 }
 
@@ -87,12 +101,24 @@ export default async function handler(req, res) {
   }
 
   let gradeValue = 0;
+  let specialLabel = null;
   if (!isRaw) {
-    const parsedGrade = Number(grade); // '9.5' and 'abc' are not valid integer grades
-    if (!Number.isInteger(parsedGrade) || parsedGrade < 1 || parsedGrade > 10) {
-      return res.status(400).json({ error: 'Invalid grade' });
+    const token = String(grade === undefined ? '' : grade).toLowerCase();
+    if (Object.prototype.hasOwnProperty.call(SPECIAL_GRADES, token)) {
+      const spec = SPECIAL_GRADES[token];
+      // A special cell exists only for its own company; EAS has no specials.
+      if (isEas || graderKey !== spec.grader) {
+        return res.status(400).json({ error: 'Invalid grade' });
+      }
+      gradeValue = spec.code;
+      specialLabel = spec.label;
+    } else {
+      const parsedGrade = Number(grade); // '9.5' and 'abc' are not valid integer grades
+      if (!Number.isInteger(parsedGrade) || parsedGrade < 1 || parsedGrade > 10) {
+        return res.status(400).json({ error: 'Invalid grade' });
+      }
+      gradeValue = parsedGrade;
     }
-    gradeValue = parsedGrade;
   }
 
   // Paused unless explicitly enabled: set SALES_PROVIDER_ENABLED=true in the
@@ -116,7 +142,7 @@ export default async function handler(req, res) {
 
   // The matching/caching query comes from the TCGdex record, not the client.
   const queryKey = variantInfo.derivedQuery.toLowerCase().replace(/\s+/g, ' ');
-  const cacheKey = cacheKeyFor(queryKey, graderKey, variantKey);
+  const cacheKey = cacheKeyFor(queryKey, graderKey, variantKey, gradeValue);
 
   try {
     const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
@@ -156,7 +182,8 @@ export default async function handler(req, res) {
         card_name: cachedData.card_query,
         language: cachedData.language,
         grader: graderKey,
-        grade: gradeValue,
+        grade: specialLabel ? 10 : gradeValue,
+        grade_label: specialLabel || undefined,
         variant: variantKey,
         price: cachedData.price,
         total_sales: cachedData.sample_count,
@@ -168,7 +195,7 @@ export default async function handler(req, res) {
 
     let sales;
     try {
-      sales = await fetchSales(queryKey, graderKey, gradeValue, language, variantKey, variantInfo.printing);
+      sales = await fetchSales(queryKey, graderKey, specialLabel ? 10 : gradeValue, language, variantKey, variantInfo.printing, specialLabel);
     } catch (err) {
       // Message only: never log request URLs, they contain the API key.
       console.error('sales fetch failed for ' + graderKey + ' ' + gradeValue + ': ' + errMsg(err));
@@ -191,7 +218,8 @@ export default async function handler(req, res) {
       language,
       variant: variantKey,
       grader: graderKey,
-      grade: gradeValue,
+      grade: specialLabel ? 10 : gradeValue,
+      grade_label: specialLabel || undefined,
       price: finalPrice,
       total_sales: sales.length,
       source: 'sold',

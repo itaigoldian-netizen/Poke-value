@@ -151,11 +151,6 @@ function variantQueryTerms(variantKey) {
 // title contradiction.
 export function titleMatchesVariant(title, variantKey, cardFields) {
   if (!variantKey) return true; // legacy aggregate path carries no variant
-// cardFields (CompsAPI structured card object) is corroborating evidence
-// only: it can confirm 1st edition, and a structured first_edition===true
-// contradicts every non-1st-edition variant. It never overrides an explicit
-// title contradiction.
-export function titleMatchesVariant(title, variantKey, cardFields) {
   const tokens = variantKey.split('+');
   const edition = tokens.find(t => t === 'first-edition' || t === 'unlimited' || t === 'shadowless') || null;
   const finish = tokens.find(t => t !== 'first-edition' && t !== 'unlimited' && t !== 'shadowless') || null;
@@ -398,19 +393,65 @@ export function providerCacheTag() {
   return activeProvider() === 'compsapi' ? 'compsapi' : 'scraperapi';
 }
 
-export async function fetchSales(cardQuery, grader, grade, language, variantKey, printing) {
-  if (activeProvider() === 'compsapi') {
-    return fetchCompsApiSales(cardQuery, grader, grade, language, variantKey, printing);
+// Special grades sit ABOVE a regular 10 (Nov8 18:02, owner), and they are
+// PER COMPANY: CGC "Pristine 10" and "Perfect 10" are specials, but a BGS
+// gold-label "Pristine 10" is the REGULAR BGS 10 - only a BGS "Black Label"
+// is special. Labels never transfer across graders.
+const SPECIAL_LABELS_BY_GRADER = {
+  CGC: new Set(['pristine', 'perfect']),
+  BGS: new Set(['black label'])
+};
+
+// Positive special evidence in a title, per grader, or null.
+export function titleSpecialEvidence(title, grader) {
+  const t = String(title || '');
+  if (grader === 'CGC') {
+    if (/perfect\s*10/i.test(t)) return 'perfect';
+    if (/\bpristine\b/i.test(t)) return 'pristine';
   }
-  return fetchScraperApiSales(cardQuery, grader, grade, language, variantKey, printing);
+  if (grader === 'BGS' && /black\s*label/i.test(t)) return 'black label';
+  return null;
+}
+
+// One decision for a graded sale, combining the structured grade_label and
+// the title. A normal-10 cell rejects a sale when EITHER source carries
+// positive special evidence (a numeric 10 never overrides it); an unlabeled
+// sale stays, because most sellers state no label. A special cell requires
+// the exact structured label and rejects a contradicting title.
+export function acceptsGradedSale({ grader, grade, specialLabel, gradeLabel, title }) {
+  const label = String(gradeLabel || '').toLowerCase().trim();
+  const titleEvidence = titleSpecialEvidence(title, grader);
+  if (specialLabel) {
+    if (label !== specialLabel) return false;
+    return titleEvidence === null || titleEvidence === specialLabel;
+  }
+  if (Number(grade) !== 10) return true;
+  const specials = SPECIAL_LABELS_BY_GRADER[grader];
+  if (specials && specials.has(label)) return false;
+  return titleEvidence === null;
+}
+
+// Title-only decision for the scraper fallback (no structured fields).
+export function titleMatchesSpecialGrade(title, grader, grade, specialLabel) {
+  const ev = titleSpecialEvidence(title, grader);
+  if (specialLabel) return ev === specialLabel;
+  return !(Number(grade) === 10 && ev !== null);
+}
+
+export async function fetchSales(cardQuery, grader, grade, language, variantKey, printing, specialLabel) {
+  if (activeProvider() === 'compsapi') {
+    return fetchCompsApiSales(cardQuery, grader, grade, language, variantKey, printing, specialLabel);
+  }
+  return fetchScraperApiSales(cardQuery, grader, grade, language, variantKey, printing, specialLabel);
 }
 
 // --- ScraperAPI structured eBay search (original integration) ---
 
-async function fetchScraperApiSales(cardQuery, grader, grade, language, variantKey, printing) {
+async function fetchScraperApiSales(cardQuery, grader, grade, language, variantKey, printing, specialLabel) {
   // eBay's sold view covers roughly the last 90 days; it has no day-range parameter.
   const isRaw = grader === 'RAW';
-  let searchString = isRaw ? cardQuery : `${cardQuery} ${grader} ${grade}`;
+  let searchString = isRaw ? cardQuery : `$${cardQuery} $${grader} $${grade}`;
+  if (specialLabel) searchString += specialLabel === 'black label' ? ' Black Label' : ' Pristine';
   if (language !== 'English') searchString += ` ${language}`;
   if (variantKey) searchString += ' ' + variantQueryTerms(variantKey).join(' ');
 
@@ -456,6 +497,8 @@ async function fetchScraperApiSales(cardQuery, grader, grade, language, variantK
     } else {
       const exactGradeRegex = new RegExp(`\\b${grader}\\s*-?\\s*${grade}(?!\\d|\\.\\d)`, 'i');
       if (!exactGradeRegex.test(title)) continue;
+      // Special cell: exact label required; normal-10: labeled specials out.
+      if (!titleMatchesSpecialGrade(title, grader, grade, specialLabel)) continue;
     }
 
     if (!titleMatchesVariant(title, variantKey)) continue;
@@ -482,7 +525,7 @@ const COMPS_LANG = { English: 'en', Japanese: 'ja', Chinese: 'zh', Korean: 'ko' 
 // and we drop them again locally so a flag definition change never leaks one in.
 const COMPS_JUNK_FLAGS = new Set(['lot', 'mystery', 'sealed', 'accessory', 'replica', 'keyword_stuffing', 'not_graded_claim', 'title_missing']);
 
-async function fetchCompsApiSales(cardQuery, grader, grade, language, variantKey, printing) {
+async function fetchCompsApiSales(cardQuery, grader, grade, language, variantKey, printing, specialLabel) {
   const key = process.env.COMPS_API_KEY;
   if (!key) {
     throw new Error('data provider is not configured');
@@ -557,9 +600,16 @@ async function fetchCompsApiSales(cardQuery, grader, grade, language, variantKey
     } else {
       if (String(c.grader || '').toUpperCase() !== grader) continue;
       if (String(c.grade || '') !== String(grade)) continue;
+      // Structured grade_label (docs: "gem mint, pristine, black label, mint
+      // or near mint", null when unstated) is the only evidence separating a
+      // special grade from a regular 10.
+      // grade check above passed; special/label decision needs the title
+      // too, so it runs just after the title is read below.
+      const pendingLabel = c.grade_label;
     }
 
     const title = String(item.title || '');
+    if (!isRaw && !acceptsGradedSale({ grader, grade, specialLabel, gradeLabel: pendingLabel, title })) continue;
     if (!titleMatchesVariant(title, variantKey, c)) continue;
     // Printing identity evidence (Nov8): required for every counted sale; the
     // provider's structured card_number is accepted as slash-number evidence.

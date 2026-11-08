@@ -24,6 +24,11 @@ const LANGUAGES = ['English', 'Japanese', 'Chinese', 'Korean'];
 // a c4 RAW row is a stale median and is never served.
 const CACHE_KEY_PREFIX = 'c4:';
 const RAW_CACHE_KEY_PREFIX = 'c5:';
+// c6 (Nov8 18:02, owner: special grades): foreign grade-10 rows. c4 normal-10
+// rows may mix positively labeled special grades and are never served.
+const TEN_CACHE_KEY_PREFIX = 'c6:';
+// Synthetic grade codes for special cells (see api/company-price.js).
+const SPECIAL_CODE_LABEL = { 101: 'pristine', 102: 'black label' };
 const CACHE_TTL_MS = 14 * 24 * 60 * 60 * 1000;
 
 function errMsg(err) {
@@ -75,6 +80,7 @@ export default async function handler(req, res) {
   const tag = providerCacheTag() + ':' + queryKey + '|';
   const keyPrefix = CACHE_KEY_PREFIX + tag;
   const rawKeyPrefix = RAW_CACHE_KEY_PREFIX + tag;
+  const tenKeyPrefix = TEN_CACHE_KEY_PREFIX + tag;
 
   try {
     const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
@@ -83,7 +89,7 @@ export default async function handler(req, res) {
       .from('price_cache')
       .select('*')
       .eq('language', language)
-      .or(`card_key.like.${keyPrefix}%,card_key.like.${rawKeyPrefix}%`);
+      .or(`card_key.like.$${keyPrefix}%,card_key.like.$${rawKeyPrefix}%,card_key.like.$${tenKeyPrefix}%`);
 
     if (error) {
       console.error('cached prices read failed: ' + errMsg(error));
@@ -102,10 +108,15 @@ export default async function handler(req, res) {
       // A c4 RAW row predates the no-medians rule (Nov8 17:51) and is a
       // median: never serve it. RAW cells are served from c5 rows only.
       .filter(r => !(String(r.card_key).startsWith(CACHE_KEY_PREFIX) && String(r.card_key).toLowerCase().includes('|raw|')))
+      // A c4 foreign grade-10 row predates the special-grade split (Nov8
+      // 18:02) and may mix labeled specials: never serve it. Grade-10 cells
+      // are served from c6 rows only.
+      .filter(r => !(String(r.card_key).startsWith(CACHE_KEY_PREFIX) && Number(r.grade) === 10))
       .filter(r => (now - new Date(r.updated_at).getTime()) < CACHE_TTL_MS)
       .map(r => ({
         grader: String(r.card_key).split('|')[1].toUpperCase(),
-        grade: r.grade,
+        grade: Number(r.grade) > 100 ? 10 : r.grade,
+        grade_label: SPECIAL_CODE_LABEL[r.grade] || undefined,
         price: r.price,
         total_sales: r.sample_count,
         updated_at: r.updated_at,

@@ -783,6 +783,34 @@ body.search-focus .dev-notice,body.search-focus .intro-card,body.search-focus .l
                 });
                 matrixBody.appendChild(tr);
             }
+            // Special grades (owner request Nov8 18:02): separate cells above
+            // a regular 10. Each row activates only its own company's cell;
+            // every other company cell is an inert dash, never a fake lookup,
+            // and EAS never gets a special cell (excluded from its formula).
+            const SPECIAL_ROWS = [
+                { label: 'Pristine 10', grader: 'CGC', token: 'pristine10' },
+                { label: 'Black Label', grader: 'BGS', token: 'blacklabel' }
+            ];
+            SPECIAL_ROWS.forEach(function(sr) {
+                const tr = document.createElement('tr');
+                const lbl = document.createElement('td');
+                lbl.className = 'pv-grade-lbl';
+                lbl.textContent = sr.label;
+                tr.appendChild(lbl);
+                MATRIX_GRADERS.forEach(function(g) {
+                    const td = document.createElement('td');
+                    if (g === sr.grader) {
+                        td.appendChild(makeCell(card, cardQuery, g, sr.token, pick));
+                    } else {
+                        const dash = document.createElement('span');
+                        dash.className = 'm';
+                        dash.textContent = '-';
+                        td.appendChild(dash);
+                    }
+                    tr.appendChild(td);
+                });
+                matrixBody.appendChild(tr);
+            });
             currentTcgId = card.id || '';
             if (!pick.needsPick) preloadCachedPrices(cardQuery, card.variantKey); // passive: fills fresh cached cells only
             // RTL overflow starts at the left in some browsers; anchor the view
@@ -844,7 +872,10 @@ body.search-focus .dev-notice,body.search-focus .intro-card,body.search-focus .l
                 if (!data || !Array.isArray(data.cells)) return;
                 data.cells.forEach(function(c) {
                     if (!c || c.price === null || c.price === undefined || isNaN(Number(c.price))) return;
-                    const btn = document.getElementById('cell-' + c.grader + '-' + c.grade);
+                    let cellId = 'cell-' + c.grader + '-' + c.grade;
+                    if (c.grade_label === 'pristine' && c.grader === 'CGC') cellId = 'cell-CGC-pristine10';
+                    if (c.grade_label === 'black label' && c.grader === 'BGS') cellId = 'cell-BGS-blacklabel';
+                    const btn = document.getElementById(cellId);
                     if (btn && btn.disabled === false && btn.querySelector('.cta')) {
                         fillLoadedCell(btn, c.price, c.total_sales, c.updated_at, c.grader === 'RAW', c.currency, c.source, c.per_currency);
                     }
@@ -860,7 +891,7 @@ body.search-focus .dev-notice,body.search-focus .intro-card,body.search-focus .l
             btn.innerHTML = '<span class="m">טוען...</span>';
             try {
                 let url = `/api/company-price?card=${encodeURIComponent(cardQuery)}&language=${encodeURIComponent(currentLanguage)}&grader=${encodeURIComponent(grader)}&tcg=${encodeURIComponent(currentTcgId || '')}`;
-                if (grader !== 'RAW') url += `&grade=${grade}`;
+                if (grader !== 'RAW') url += `&grade=$${encodeURIComponent(grade)}`;
                 if (variantKey) url += `&variant=${encodeURIComponent(variantKey)}`;
                 const response = await fetch(url);
                 let data = null;
