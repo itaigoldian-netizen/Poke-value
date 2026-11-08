@@ -128,3 +128,36 @@ test('special grade: scraper title-only rule mirrors per-grader evidence', () =>
   assert.equal(titleMatchesSpecialGrade('Charizard CGC 10', 'CGC', 10, 'pristine'), false);
   assert.equal(titleMatchesSpecialGrade('Charizard BGS 10 Black Label', 'BGS', 10, 'black label'), true);
 });
+
+import { fetchSales } from '../_sales-provider.js';
+
+// Regression (Nov8): the graded (non-RAW) fetchSales branch must pass the
+// structured grade_label into the accept decision. A block-scoped
+// `pendingLabel` there threw ReferenceError in production and 502d every
+// provider cell while the pure matching tests above stayed green.
+test('fetchSales graded branch: structured grade_label reaches the accept decision (pendingLabel regression)', async () => {
+  process.env.SALES_PROVIDER = 'compsapi';
+  process.env.COMPS_API_KEY = 'test-key';
+  const realFetch = globalThis.fetch;
+  const mk = (label, title) => ({
+    price: 100,
+    title,
+    last_sold: '2026-10-01T00:00:00Z',
+    card: { graded: true, grader: 'CGC', grade: '10', grade_label: label, card_number: '4/102', year: 1999, language: 'en', first_edition: false, flags: [] },
+  });
+  globalThis.fetch = async () => ({ ok: true, status: 200, json: async () => ({ items: [
+    mk(null, 'Pokemon Charizard Base Set 4/102 Unlimited Holo CGC 10'),
+    mk('gem mint', 'Pokemon Charizard Base Set 4/102 Unlimited Holo CGC 10 Gem Mint'),
+    mk('pristine', 'Pokemon Charizard Base Set 4/102 Unlimited Holo CGC Pristine 10'),
+  ] }) });
+  try {
+    const sales = await fetchSales('Charizard Base Set 4/102', 'CGC', 10, 'English', 'unlimited+holo', BASE1, null);
+    // Unlabeled and gem-mint sales enter the normal-10 cell; the structured
+    // pristine label is special evidence and stays out of it.
+    assert.equal(sales.length, 2);
+  } finally {
+    globalThis.fetch = realFetch;
+    delete process.env.SALES_PROVIDER;
+    delete process.env.COMPS_API_KEY;
+  }
+});
