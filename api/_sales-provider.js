@@ -450,7 +450,7 @@ export async function fetchSales(cardQuery, grader, grade, language, variantKey,
 async function fetchScraperApiSales(cardQuery, grader, grade, language, variantKey, printing, specialLabel) {
   // eBay's sold view covers roughly the last 90 days; it has no day-range parameter.
   const isRaw = grader === 'RAW';
-  let searchString = isRaw ? cardQuery : `$${cardQuery} $${grader} $${grade}`;
+  let searchString = isRaw ? cardQuery : `${cardQuery} ${grader} ${grade}`;
   if (specialLabel) searchString += specialLabel === 'black label' ? ' Black Label' : ' Pristine';
   if (language !== 'English') searchString += ` ${language}`;
   if (variantKey) searchString += ' ' + variantQueryTerms(variantKey).join(' ');

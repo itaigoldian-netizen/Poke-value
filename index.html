@@ -891,7 +891,7 @@ body.search-focus .dev-notice,body.search-focus .intro-card,body.search-focus .l
             btn.innerHTML = '<span class="m">טוען...</span>';
             try {
                 let url = `/api/company-price?card=${encodeURIComponent(cardQuery)}&language=${encodeURIComponent(currentLanguage)}&grader=${encodeURIComponent(grader)}&tcg=${encodeURIComponent(currentTcgId || '')}`;
-                if (grader !== 'RAW') url += `&grade=$${encodeURIComponent(grade)}`;
+                if (grader !== 'RAW') url += `&grade=${encodeURIComponent(grade)}`;
                 if (variantKey) url += `&variant=${encodeURIComponent(variantKey)}`;
                 const response = await fetch(url);
                 let data = null;

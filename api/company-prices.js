@@ -89,7 +89,7 @@ export default async function handler(req, res) {
       .from('price_cache')
       .select('*')
       .eq('language', language)
-      .or(`card_key.like.$${keyPrefix}%,card_key.like.$${rawKeyPrefix}%,card_key.like.$${tenKeyPrefix}%`);
+      .or(`card_key.like.${keyPrefix}%,card_key.like.${rawKeyPrefix}%,card_key.like.${tenKeyPrefix}%`);
 
     if (error) {
       console.error('cached prices read failed: ' + errMsg(error));
