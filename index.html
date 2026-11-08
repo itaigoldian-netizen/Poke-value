@@ -589,7 +589,7 @@ body{font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif}
         //     passive batch read: all fresh (<=14d) cached cells for the card.
         //     Never calls the provider.
         //   GET /api/company-price?card=<exact identity>&language=<lang>
-        //       &grader=PSA|BGS|CGC|TAG|RAW[&grade=1..10]
+        //       &grader=PSA|BGS|CGC|SGC|TAG|RAW[&grade=1..10]
         //     click path: serves the fresh cached value, otherwise fetches the
         //     provider, stores, and returns.
         //   -> { card_name, language, grader, grade, price, total_sales,
@@ -609,7 +609,7 @@ body{font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif}
         // These are clickable lookup cells, not preloaded data. EAS leads: its
         // values come only from this site's approved deal reports (owner
         // decision Nov7 17:36), never from the external provider.
-        const MATRIX_GRADERS = ['EAS', 'PSA', 'BGS', 'CGC', 'TAG'];
+        const MATRIX_GRADERS = ['EAS', 'PSA', 'BGS', 'CGC', 'SGC', 'TAG'];
         const cellInflight = new Set(); // repeated clicks join the same request
         let currentTcgId = ''; // exact TCGdex id of the picked card; the server verifies variants against it
 

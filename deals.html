@@ -171,6 +171,7 @@ button.link:hover{background:#eff6ff}
                         <option value="BGS">BGS</option>
                         <option value="CGC">CGC</option>
                         <option value="SGC">SGC</option>
+                        <option value="TAG">TAG</option>
                         <option value="other">חברה אחרת</option>
                     </select>
                 </div>
@@ -218,7 +219,7 @@ button.link:hover{background:#eff6ff}
 
         var sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-        var GRADER_NAMES = {PSA:'PSA', BGS:'BGS', CGC:'CGC', SGC:'SGC', other:'דירוג'};
+        var GRADER_NAMES = {PSA:'PSA', BGS:'BGS', CGC:'CGC', SGC:'SGC', TAG:'TAG', other:'דירוג'};
         var LANG_NAMES = {English:'אנגלית', Japanese:'יפנית', Chinese:'סינית', Korean:'קוריאנית', other:'אחרת'};
 
         function fmtDate(iso){

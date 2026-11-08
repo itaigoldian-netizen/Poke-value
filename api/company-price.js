@@ -9,7 +9,7 @@ import { fetchEasCommunityCells } from './_community-sales.js';
 // grader+grade search instead of the all-graders fanout.
 //
 //   GET /api/company-price?card=<query>&language=<lang>
-//       &grader=PSA|BGS|CGC|TAG|EAS|RAW[&grade=1..10]
+//       &grader=PSA|BGS|CGC|SGC|TAG|EAS|RAW[&grade=1..10]
 //
 // EAS never calls the external provider (owner decision Nov7 17:36): EAS
 // recorded sales come only from this site's approved deal reports, so the
@@ -25,7 +25,7 @@ import { fetchEasCommunityCells } from './_community-sales.js';
 // damaged and clean raw copies cannot yet be separated; the frontend shows
 // the raw value without a condition claim.
 
-const GRADERS = ['PSA', 'BGS', 'CGC', 'TAG']; // no EAS: local deal reports only
+const GRADERS = ['PSA', 'BGS', 'CGC', 'SGC', 'TAG']; // no EAS: local deal reports only
 const LANGUAGES = ['English', 'Japanese', 'Chinese', 'Korean'];
 
 // Cache validity: 14 days (owner request Nov7, was 24h). Responses carry
@@ -175,7 +175,7 @@ export default async function handler(req, res) {
     }
 
     const prices = sales.map(s => s.price);
-    // Foreign grader companies (PSA/BGS/CGC/TAG): simple arithmetic mean
+    // Foreign grader companies (PSA/BGS/CGC/SGC/TAG): simple arithmetic mean
     // (owner instruction Nov8 16:17). RAW stays on the median - the mean
     // instruction covered the grading companies only, and raw-sale condition
     // variance makes a mean misleading without a condition field.
