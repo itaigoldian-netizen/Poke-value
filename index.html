@@ -105,6 +105,7 @@ body{font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif}
 .site-footer .credit{color:#94a3b8;font-size:0.8rem;margin-top:8px}
 .site-footer .credit a{color:#94a3b8}
 .hidden{display:none}
+body.search-focus .dev-notice,body.search-focus .intro-card,body.search-focus .lang-row,body.search-focus .pv-newslink,body.search-focus .pv-auth-btn{display:none}
     </style>
 </head>
 <body class="bg-slate-50 text-slate-800">
@@ -266,6 +267,8 @@ body{font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif}
         let searchToken = 0; // bumped per search; stale in-flight responses are discarded
         searchBtn.addEventListener('click', performSearch);
         searchInput.addEventListener('keypress', (e) => { if(e.key === 'Enter') performSearch(); });
+        // While a card search is active, hide page chrome (banner, intro, languages, nav, auth) so results stay in focus; clearing the box restores it.
+        searchInput.addEventListener('input', () => { if (!searchInput.value.trim()) document.body.classList.remove('search-focus'); });
 
         async function fetchSetNames(lang) {
             if (setNameCache[lang]) return setNameCache[lang];
@@ -316,6 +319,7 @@ body{font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif}
             if (searching) return; // ignore overlapping/repeated searches while one runs
             const cardQuery = searchInput.value.trim();
             if(!cardQuery) return;
+            document.body.classList.add('search-focus');
             searching = true;
             searchBtn.disabled = true;
             searchBtn.classList.add('opacity-50', 'cursor-not-allowed');
