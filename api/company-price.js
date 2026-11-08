@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { fetchSales, providerKeyConfigured, providerCacheTag, resolveCardVariant } from './_sales-provider.js';
 import { fetchEasCommunityCells } from './_community-sales.js';
+import { easFormulaEstimate } from './_eas-formula.js';
 
 // Per-company+grade lookup (owner-approved click model, Nov7): one request
 // serves exactly one cell. A fresh cached value (<=14 days) is served from
@@ -147,17 +148,131 @@ export default async function handler(req, res) {
   try {
     const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 
-    // EAS: live read of approved community deal reports only - no provider
-    // request, no cache write (community data changes on every approval).
+    // EAS: the owner's weighted formula (Nov8 17:51:22 "והקלפים של EAS
+    // מחושבים לפי הנוסחה"), blending per-company USD arithmetic means with
+    // fixed weights (api/_eas-formula.js). The owner's own design sets the
+    // input cost (Nov7 17:37:35: "בשביל החישוב של הנוסחה צריך 4 בקשות"):
+    // cache-first per company, and a company with no fresh cached cell is
+    // fetched once - at most 4 provider requests per click, then cached for
+    // 14 days. When no community reports exist the formula still runs from
+    // eBay data alone (Nov8 17:56:12). ILS community reports are kept and
+    // labeled separately; they never enter the USD blend (Nov8 17:57:05).
+    // EAS's own weight comes only from approved USD community reports, never
+    // from the external provider (Nov7 17:36). The free-quota guard stands: a
+    // provider 429 fails that company's input honestly, never a paid overage.
     if (isEas) {
       const { cells, error: communityError } = await fetchEasCommunityCells(supabase, String(tcg), language, variantKey);
       if (communityError) {
         console.error('community sales read failed: ' + errMsg(communityError));
         return res.status(500).json({ error: 'Server is not configured' });
       }
-      const cell = (cells || []).find(c => c.grade === gradeValue);
-      if (!cell) return res.status(404).json({ error: 'No data found' });
-      return res.status(200).json({ card_name: variantInfo.cardName, language, variant: variantKey, ...cell });
+      const communityCell = (cells || []).find(c => c.grade === gradeValue) || null;
+
+      const means = {};
+      let totalSamples = 0;
+      // Every company's outcome is tracked: a provider failure (quota pause,
+      // network) is NOT the same as legitimately missing sales, and the
+      // response must say which happened. An incomplete estimate is never
+      // cached - the EAS cell is always computed live.
+      const omitted = [];
+      const usdCommunity = communityCell && communityCell.per_currency && communityCell.per_currency.USD;
+      if (usdCommunity) {
+        means.EAS = usdCommunity.price;
+        totalSamples += usdCommunity.count;
+      }
+      for (const fg of ['PSA', 'BGS', 'CGC', 'TAG']) {
+        const fKey = cacheKeyFor(queryKey, fg, variantKey, gradeValue);
+        let mean = null;
+        let samples = 0;
+        let fetched = false;
+        let failed = false;
+        try {
+          const { data: row } = await supabase
+            .from('price_cache')
+            .select('*')
+            .eq('card_key', fKey)
+            .eq('language', language)
+            .eq('grade', gradeValue)
+            .single();
+          if (row && (Date.now() - new Date(row.updated_at).getTime()) < CACHE_TTL_MS) {
+            mean = Number(row.price);
+            samples = Number(row.sample_count) || 0;
+          }
+        } catch (cacheReadErr) { /* no fresh row: fetch below */ }
+        if (mean === null) {
+          fetched = true;
+          try {
+            const fSales = await fetchSales(queryKey, fg, gradeValue, language, variantKey, variantInfo.printing, null);
+            if (fSales.length > 0) {
+              mean = Math.round((fSales.reduce((sum, x) => sum + x.price, 0) / fSales.length) * 100) / 100;
+              samples = fSales.length;
+              try {
+                const { error: fCacheError } = await supabase
+                  .from('price_cache')
+                  .upsert({
+                    card_key: fKey,
+                    card_query: variantInfo.derivedQuery,
+                    language,
+                    grade: gradeValue,
+                    price: mean,
+                    sample_count: samples,
+                    breakdown: {},
+                    updated_at: new Date().toISOString()
+                  }, { onConflict: 'card_key,language,grade' });
+                if (fCacheError) console.error('cache write failed: ' + errMsg(fCacheError));
+              } catch (fCacheErr) { console.error('cache write failed: ' + errMsg(fCacheErr)); }
+            }
+          } catch (fErr) {
+            const msg = errMsg(fErr);
+            console.error('formula input failed for ' + fg + ' ' + gradeValue + ': ' + msg);
+            failed = true;
+            omitted.push({ grader: fg, reason: /quota/i.test(msg) ? 'provider-quota' : 'provider-error' });
+          }
+        }
+        if (typeof mean === 'number' && isFinite(mean) && mean > 0) {
+          means[fg] = mean;
+          totalSamples += samples;
+        } else if (fetched && !failed) {
+          // The provider answered fine; this company genuinely has no sales.
+          omitted.push({ grader: fg, reason: 'no-sales' });
+        }
+      }
+
+      const estimate = easFormulaEstimate(means);
+      if (!estimate) {
+        // No USD formula is possible. ILS-only community reports are NOT a
+        // substitute (owner: USD-only blend, Nov8 17:57:05): they return as
+        // their own clearly labeled community stats with the formula marked
+        // explicitly unavailable.
+        if (communityCell) {
+          return res.status(200).json({
+            card_name: variantInfo.cardName,
+            language,
+            variant: variantKey,
+            ...communityCell,
+            formula_status: 'unavailable',
+            formula_reason: 'no-usd-inputs',
+            formula: { contributors: [], omitted }
+          });
+        }
+        return res.status(404).json({ error: 'No data found' });
+      }
+      return res.status(200).json({
+        card_name: variantInfo.cardName,
+        language,
+        variant: variantKey,
+        grader: 'EAS',
+        grade: gradeValue,
+        price: estimate.price,
+        currency: 'USD',
+        total_sales: totalSamples,
+        source: 'formula',
+        formula_status: omitted.length ? 'partial' : 'complete',
+        formula: { contributors: estimate.contributors, active_weight: estimate.activeWeight, omitted },
+        per_currency: communityCell ? communityCell.per_currency : undefined,
+        cached: false,
+        updated_at: new Date().toISOString()
+      });
     }
 
     // Column names match the user's actual price_cache table.

@@ -171,7 +171,7 @@ body.search-focus .dev-notice,body.search-focus .intro-card,body.search-focus .l
                     </table>
                 </div>
                 <p class="pv-chart-note">לחיצה על תא טוענת שווי של אותה חברה וציון ממכירות שהסתיימו בפועל. מחיר שמור מוצג עם תאריך העדכון שלו.</p>
-                <p class="pv-chart-note">כל התאים מציגים מכירות בפועל של אותה חברת דירוג. עמודת EAS מציגה ממוצע של דיווחי העסקאות שאושרו באתר, ואינה נטענת ממקור חיצוני; הערכת EAS בנוסחה מנתוני ארבע החברות עדיין בבדיקה ואינה מוצגת. ערך "לא מדורג" מגיע ממכירות של קלפים לא מדורגים, אך אין במקור הפרדת מצב, ולכן הוא מכסה מצבים מעורבים.</p>
+                <p class="pv-chart-note">כל התאים מציגים ממוצע פשוט של מכירות בפועל של אותה חברת דירוג. עמודת EAS מציגה הערכה לפי הנוסחה המשוקללת: קודם ממוצע נפרד לכל חברה (PSA, BGS, CGC ו-TAG ממכירות eBay, ו-EAS מדיווחי עסקאות שאושרו באתר בדולרים בלבד), ואז שקלול של הממוצעים לפי האחוזים בנוסחה; דיווחים בשקלים נשמרים ומוצגים בנפרד ואינם מומרים. דירוגים מיוחדים מעל 10 רגיל (CGC Pristine/Perfect 10, BGS Black Label) הם תאים נפרדים ואינם נכנסים לתאי 10 הרגילים או לנוסחת EAS. ערך "לא מדורג" מגיע ממכירות של קלפים לא מדורגים, אך אין במקור הפרדת מצב, ולכן הוא מכסה מצבים מעורבים.</p>
                 <div id="historySection" class="hidden">
                     <h3 class="pv-sales-title">היסטוריית מחירים</h3>
                     <div id="historyChart" dir="ltr"></div>
@@ -849,6 +849,11 @@ body.search-focus .dev-notice,body.search-focus .intro-card,body.search-focus .l
             if (source === 'community' && curKeys.length > 1) {
                 priceTxt = curKeys.map(c => fmtCellPrice(perCurrency[c].price, c)).join(' · ');
                 salesTxt = 'דיווחים: ' + curKeys.map(c => perCurrency[c].count + '×' + (c === 'ILS' ? '₪' : '$')).join(' · ');
+            } else if (source === 'formula') {
+                // EAS formula estimate: a weighted blend of per-company means,
+                // not a single company's sale count.
+                priceTxt = fmtCellPrice(price, currency || 'USD');
+                salesTxt = 'הערכה לפי נוסחה';
             } else {
                 priceTxt = fmtCellPrice(price, currency || 'USD');
                 salesTxt = (Number(totalSales) || 0) + (source === 'community'
@@ -898,6 +903,16 @@ body.search-focus .dev-notice,body.search-focus .intro-card,body.search-focus .l
                 try { data = await response.json(); } catch (e) { data = null; }
                 if (response.ok && data && data.price !== null && data.price !== undefined && !isNaN(Number(data.price))) {
                     fillLoadedCell(btn, data.price, data.total_sales, data.updated_at, grader === 'RAW', data.currency, data.source, data.per_currency);
+                    // Formula honesty (owner rules Nov8): a partial blend names
+                    // the missing companies and why; ILS-only community stats
+                    // are marked as NOT the USD formula.
+                    if (data.source === 'formula' && data.formula && Array.isArray(data.formula.omitted) && data.formula.omitted.length) {
+                        const reasonTxt = { 'provider-quota': 'מכסת הספק', 'provider-error': 'שגיאת ספק', 'no-sales': 'אין מכירות' };
+                        btn.innerHTML += '<span class="m">הערכה חלקית - חסר: ' + data.formula.omitted.map(function(o) { return o.grader + ' (' + (reasonTxt[o.reason] || o.reason) + ')'; }).join(', ') + '</span>';
+                    }
+                    if (data.formula_status === 'unavailable') {
+                        btn.innerHTML += '<span class="m">אין הערכת נוסחה בדולרים</span>';
+                    }
                     if (Array.isArray(data.sales)) renderSales(data.sales);
                     if (Array.isArray(data.history)) renderHistory(data.history);
                 } else if (response.status === 404) {
