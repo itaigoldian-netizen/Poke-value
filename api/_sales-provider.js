@@ -101,15 +101,16 @@ export function variantOptionsFromDetail(detailed) {
   return { options, unsupported: [...new Set(unsupported)] };
 }
 
-// Search terms appended to the provider query for EVERY variant token: the
-// provider's capped result pool must be narrowed toward the wanted variant
-// before the title filter below makes the final call.
+// Search terms appended to the provider query: FINISH tokens only. The query
+// is discovery - it narrows the provider's capped result pool toward the
+// wanted variant; MATCHING stays with the strict title filter below. Edition
+// terms ('unlimited', '1st edition') are deliberately NOT put in the query:
+// sellers rarely state them, so they would zero the pool before the title
+// filter (which still requires positive edition evidence) can judge.
 function variantQueryTerms(variantKey) {
   const terms = [];
   for (const t of variantKey.split('+')) {
-    if (t === 'first-edition') terms.push('1st edition');
-    else if (t === 'unlimited') terms.push('unlimited');
-    else if (t === 'holo') terms.push('holo');
+    if (t === 'holo') terms.push('holo');
     else if (t === 'non-holo') terms.push('non holo');
     else if (t === 'reverse') terms.push('reverse holo');
     else if (t === 'w-promo') terms.push('w promo');
@@ -139,6 +140,124 @@ export function titleMatchesVariant(title, variantKey) {
   if (finish === 'non-holo' && !(RE_NONHOLO.test(title) && !RE_REVERSE.test(title))) return false;
   if (finish === 'reverse' && !(RE_REVERSE.test(title) && RE_HOLO.test(title) && !RE_NONHOLO.test(title))) return false;
   if (finish === 'w-promo' && !(RE_WPROMO.test(title) && !RE_REVERSE.test(title) && !RE_NONHOLO.test(title))) return false;
+  return true;
+}
+
+// --- Canonical query identity (repair Nov8, Main-approved direction) ---
+// The provider query must be built from the tokens eBay sellers actually
+// write: canonical ENGLISH card name, set evidence (English set NAME for
+// English printings; the set CODE - 'S8b', 'sv2a' - for JP/KR/CN printings,
+// which sellers do include) and number/printed-total. The previous format
+// (TCGdex name + set id + bare localId) matched nothing at the source, so
+// every cell came back honest-but-empty (verified live Nov8: CompsAPI
+// count_before_filters=0 for 'Charizard base1 4 unlimited holo' and for
+// 'リザードン S8b 017 holo', while the same provider returns real sales for
+// canonical queries).
+//
+// Cross-language name resolution happens only when the identity binding is
+// PROVEN (Main Nov8): the TCGdex record's dexId resolves the species through
+// PokéAPI (canonical en/ja/ko/zh names); the local-language card name must
+// START WITH the local species name and carry nothing after it except known
+// Latin form tokens. Trainers/Energy, multi-species (&), unknown suffixes
+// and missing species data all fail CLOSED: no query, no provider call,
+// honest no-data. A guessed translation is never emitted.
+const FORM_TOKENS = ['V-UNION', 'VSTAR', 'VMAX', 'BREAK', 'PRIME', 'GX', 'EX', 'ex', 'V'];
+const POKEAPI_LANG = { Japanese: 'ja', Korean: 'ko', Chinese: 'zh-Hans' };
+const speciesCache = new Map(); // dexId -> { at, names } (1h, per cold start)
+async function fetchSpeciesNames(dexId) {
+  const ck = String(dexId);
+  const hit = speciesCache.get(ck);
+  if (hit && Date.now() - hit.at < 3600_000) return hit.names;
+  try {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 4000);
+    const r = await fetch(`https://pokeapi.co/api/v2/pokemon-species/${ck}`, { signal: ctrl.signal });
+    clearTimeout(t);
+    if (!r.ok) return null;
+    const body = await r.json();
+    const names = {};
+    for (const n of (body && body.names) || []) {
+      const lang = n && n.language && n.language.name;
+      if (lang && n.name) names[lang] = n.name;
+    }
+    speciesCache.set(ck, { at: Date.now(), names });
+    return names;
+  } catch { return null; }
+}
+
+// Returns the proven canonical English card name, or null (fail closed).
+async function canonicalEnglishName(detail, language) {
+  const localName = String(detail.name || '').trim();
+  if (!localName) return null;
+  if (language === 'English') return localName;
+  if (String(detail.category || 'Pokemon') !== 'Pokemon') return null;
+  const dexIds = Array.isArray(detail.dexId) ? detail.dexId : (detail.dexId ? [detail.dexId] : []);
+  if (dexIds.length !== 1) return null; // multi-species or unknown: fail closed
+  const names = await fetchSpeciesNames(dexIds[0]);
+  if (!names || !names.en) return null;
+  const localSpecies = names[POKEAPI_LANG[language]];
+  if (!localSpecies || !localName.startsWith(localSpecies)) return null;
+  const suffix = localName.slice(localSpecies.length).trim();
+  if (!suffix) return names.en;
+  const tokens = suffix.split(/[\s\u3000]+/).filter(Boolean);
+  if (!tokens.length || !tokens.every(t => FORM_TOKENS.includes(t))) return null;
+  return names.en + ' ' + tokens.join(' ');
+}
+
+// Printing identity for query construction and title-side verification.
+function printingIdentity(detail, language) {
+  const set = detail.set || {};
+  const setId = String(set.id || '').trim();
+  const setName = String(set.name || '').trim();
+  const localId = String(detail.localId || '').trim();
+  const cc = set.cardCount || {};
+  const official = Number(cc.official) > 0 ? Number(cc.official) : null;
+  const ym = String(set.releaseDate || '').match(/^(\d{4})/);
+  const year = ym ? Number(ym[1]) : null;
+  if (!setId || !localId) return null;
+  const setToken = language === 'English' ? setName : setId;
+  if (!setToken) return null;
+  return { setId, setName, setToken, localId, official, year, numberSlash: official ? localId + '/' + official : null };
+}
+
+function escapeRegExp(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+
+// Positive print/set/number evidence (Main direction Nov8): a sale counts
+// only when its title positively supports THIS printing and nothing in it
+// contradicts the identity. Absence of evidence excludes; contradiction
+// rejects. Year consistency is evidence-based: when a title states a year
+// and the set year is known they must agree, which rejects dated reprints
+// (e.g. a 2021 'Celebrations Classic 4/102' in a 1999 Base Set cell) without
+// any claim that a marker list is exhaustive.
+const RE_TITLE_YEAR = /\b(19|20)\d{2}\b/;
+const RE_REPRINT_COLLECTION = /\b(celebrations|classic collection|anniversary|mcdonald'?s|trick or trade)\b/i;
+export function titleMatchesPrinting(title, printing, language) {
+  const t = String(title || '');
+  if (!printing || !t) return false;
+  const lower = t.toLowerCase();
+  // Set evidence
+  let setOk;
+  if (language === 'English') {
+    const tokens = String(printing.setName || '').toLowerCase().split(/[^a-z0-9]+/).filter(w => w && w !== 'the' && w !== 'of');
+    setOk = tokens.length > 0 && tokens.every(w => lower.includes(w));
+  } else {
+    setOk = new RegExp('\\b' + escapeRegExp(printing.setId) + '\\b', 'i').test(t);
+  }
+  if (!setOk) return false;
+  // Number evidence: '017/184' strongest; '#017' accepted with set evidence.
+  const hasSlash = printing.numberSlash ? t.includes(printing.numberSlash) : false;
+  const hasHash = new RegExp('#\\s*0*' + escapeRegExp(printing.localId) + '(?!\\d)').test(t);
+  if (!hasSlash && !hasHash) return false;
+  // Year consistency (only when the title states a year)
+  if (printing.year) {
+    const ym = t.match(RE_TITLE_YEAR);
+    if (ym && Number(ym[0]) !== printing.year) return false;
+  }
+  // Reprint-collection contradiction, unless the card's own set IS that collection
+  if (RE_REPRINT_COLLECTION.test(t)) {
+    const own = (String(printing.setName || '') + ' ' + String(printing.setId || '')).toLowerCase();
+    if (!RE_REPRINT_COLLECTION.test(own)) return false;
+  }
   return true;
 }
 
@@ -198,12 +317,17 @@ export async function resolveCardVariant(tcgId, language, variantRaw) {
   // The card query is DERIVED from the same TCGdex record (Main review Nov7
   // 22:33): the client's free-text card param is never trusted for matching
   // or caching, so a mismatched query with a valid tcg id cannot poison keys.
-  const setId = (detail.set && detail.set.id) || String(detail.id || '').split('-').slice(0, -1).join('-');
-  if (!detail.name || !detail.localId || !setId) {
-    return { error: { status: 503, body: { error: 'Variant verification unavailable' } } };
+  // Since Nov8 it is built from canonical ENGLISH identity (name + set
+  // evidence + number/total) - the tokens sellers actually write. When the
+  // identity cannot be PROVEN (cross-language species unresolvable, missing
+  // set data), the cell fails closed with honest no-data.
+  const enName = await canonicalEnglishName(detail, language);
+  const printing = printingIdentity(detail, language);
+  if (!enName || !printing) {
+    return { error: { status: 404, body: { error: 'No data found' } } };
   }
-  const derivedQuery = [String(detail.name), setId, String(detail.localId)].join(' ');
-  return { resolved, options: model.options, unsupported: model.unsupported, derivedQuery, cardName: String(detail.name) };
+  const derivedQuery = [enName, printing.setToken, printing.numberSlash || printing.localId].join(' ');
+  return { resolved, options: model.options, unsupported: model.unsupported, derivedQuery, cardName: String(detail.name), printing, enName };
 }
 
 export function activeProvider() {
@@ -222,16 +346,16 @@ export function providerCacheTag() {
   return activeProvider() === 'compsapi' ? 'compsapi' : 'scraperapi';
 }
 
-export async function fetchSales(cardQuery, grader, grade, language, variantKey) {
+export async function fetchSales(cardQuery, grader, grade, language, variantKey, printing) {
   if (activeProvider() === 'compsapi') {
-    return fetchCompsApiSales(cardQuery, grader, grade, language, variantKey);
+    return fetchCompsApiSales(cardQuery, grader, grade, language, variantKey, printing);
   }
-  return fetchScraperApiSales(cardQuery, grader, grade, language, variantKey);
+  return fetchScraperApiSales(cardQuery, grader, grade, language, variantKey, printing);
 }
 
 // --- ScraperAPI structured eBay search (original integration) ---
 
-async function fetchScraperApiSales(cardQuery, grader, grade, language, variantKey) {
+async function fetchScraperApiSales(cardQuery, grader, grade, language, variantKey, printing) {
   // eBay's sold view covers roughly the last 90 days; it has no day-range parameter.
   const isRaw = grader === 'RAW';
   let searchString = isRaw ? cardQuery : `${cardQuery} ${grader} ${grade}`;
@@ -283,6 +407,9 @@ async function fetchScraperApiSales(cardQuery, grader, grade, language, variantK
     }
 
     if (!titleMatchesVariant(title, variantKey)) continue;
+    // Printing identity evidence (Nov8): only when a verified printing was
+    // supplied; the legacy aggregate path carries none and stays permissive.
+    if (printing && !titleMatchesPrinting(title, printing, language)) continue;
 
     if (p.value > 0) {
       listings.push({ price: p.value, date: null, title });
@@ -300,7 +427,7 @@ const COMPS_LANG = { English: 'en', Japanese: 'ja', Chinese: 'zh', Korean: 'ko' 
 // and we drop them again locally so a flag definition change never leaks one in.
 const COMPS_JUNK_FLAGS = new Set(['lot', 'mystery', 'sealed', 'accessory', 'replica', 'keyword_stuffing', 'not_graded_claim', 'title_missing']);
 
-async function fetchCompsApiSales(cardQuery, grader, grade, language, variantKey) {
+async function fetchCompsApiSales(cardQuery, grader, grade, language, variantKey, printing) {
   const key = process.env.COMPS_API_KEY;
   if (!key) {
     throw new Error('data provider is not configured');
@@ -369,6 +496,8 @@ async function fetchCompsApiSales(cardQuery, grader, grade, language, variantKey
     }
 
     if (!titleMatchesVariant(String(item.title || ''), variantKey)) continue;
+    // Printing identity evidence (Nov8): required for every counted sale.
+    if (printing && !titleMatchesPrinting(String(item.title || ''), printing, language)) continue;
 
     listings.push({ price: item.price, date: item.last_sold || null, title: String(item.title || '') });
   }
