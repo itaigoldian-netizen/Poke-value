@@ -61,8 +61,10 @@ async function ownerFromToken(req) {
   const { data, error } = await supabase.auth.getUser(token);
   if (error || !data || !data.user) return null;
   const email = (data.user.email || '').toLowerCase();
-  const ownerEmail = (process.env.PUSH_OWNER_EMAIL || '').toLowerCase();
-  if (!ownerEmail || email !== ownerEmail) return null;
+  // Both owner accounts may subscribe owner alerts (comma-separated list).
+  const ownerEmails = (process.env.PUSH_OWNER_EMAIL || '')
+    .split(',').map(e => e.trim().toLowerCase()).filter(Boolean);
+  if (!ownerEmails.length || !ownerEmails.includes(email)) return null;
   return data.user;
 }
 
