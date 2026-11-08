@@ -41,6 +41,8 @@ button.btn:hover{background:#1d4ed8}
 button.btn:disabled{opacity:.6;cursor:default}
 button.btn.link{background:#fff;border:1px solid #2563eb;color:#2563eb;text-decoration:none}
 button.btn.link:hover{background:#eff6ff}
+a.btn{background:#2563eb;color:#fff;border:none;padding:10px 22px;border-radius:10px;font-weight:600;font-size:1rem;cursor:pointer;transition:background .15s;display:inline-block;text-decoration:none}
+a.btn:hover{background:#1d4ed8}
     </style>
 </head>
 <body>
@@ -62,6 +64,7 @@ button.btn.link:hover{background:#eff6ff}
     <main>
         <section>
             <h2>הכתבות שלנו</h2>
+            <p id="write-article-row" class="hidden" style="margin-bottom:1rem;"><a id="write-article-btn" class="btn" href="admin.html">כתיבת כתבה חדשה</a></p>
             <!--
             כתבות מתווספות דרך עמוד הניהול admin.html (עם האימייל והסיסמה
             שהוגדרו ב-Supabase). אין צורך לערוך את הקובץ הזה כדי לפרסם.
@@ -151,6 +154,19 @@ button.btn.link:hover{background:#eff6ff}
                     box.appendChild(art);
                 });
             });
+
+        // כפתור כתיבת כתבה - מוצג רק לבעלים ולמנהלים. הבדיקה מול is_admin()
+        // בצד השרת (אכיפה אמיתית נשארת ב-RLS של articles); כישלון או היעדר
+        // התחברות משאירים את הכפתור מוסתר.
+        sb.auth.getSession().then(function(res){
+            var session = res && res.data && res.data.session;
+            if (!session) return; // מבקר לא מחובר - נשאר מוסתר
+            sb.rpc('is_admin').then(function(r){
+                if (r && r.data === true){
+                    document.getElementById('write-article-row').classList.remove('hidden');
+                }
+            }).catch(function(){ /* נשאר מוסתר */ });
+        }).catch(function(){ /* נשאר מוסתר */ });
 
         // הרשמה voluntarily להתראות על כתבות חדשות (Web Push, ללא עלות).
         // ההרשמה עצמה היא ההסכמה: רק מי שלוחץ ומאשר התראות בדפדפן נרשם.
