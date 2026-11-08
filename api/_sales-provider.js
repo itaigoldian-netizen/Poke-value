@@ -605,11 +605,10 @@ async function fetchCompsApiSales(cardQuery, grader, grade, language, variantKey
       // special grade from a regular 10.
       // grade check above passed; special/label decision needs the title
       // too, so it runs just after the title is read below.
-      const pendingLabel = c.grade_label;
     }
 
     const title = String(item.title || '');
-    if (!isRaw && !acceptsGradedSale({ grader, grade, specialLabel, gradeLabel: pendingLabel, title })) continue;
+    if (!isRaw && !acceptsGradedSale({ grader, grade, specialLabel, gradeLabel: c.grade_label, title })) continue;
     if (!titleMatchesVariant(title, variantKey, c)) continue;
     // Printing identity evidence (Nov8): required for every counted sale; the
     // provider's structured card_number is accepted as slash-number evidence.
