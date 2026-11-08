@@ -625,11 +625,11 @@ body.search-focus .dev-notice,body.search-focus .intro-card,body.search-focus .l
         // choice list. A variant token appears only when the printing actually
         // splits on that dimension, so single-variant cards keep plain keys.
         const VARIANT_LABELS = {
-            'first-edition': 'מהדורה ראשונה', 'unlimited': 'Unlimited',
+            'first-edition': 'מהדורה ראשונה', 'unlimited': 'Unlimited', 'shadowless': 'Shadowless',
             'holo': 'הולו', 'non-holo': 'לא הולו', 'reverse': 'Reverse Holo', 'w-promo': 'W Promo',
         };
         const UNSUPPORTED_LABELS = {
-            'shadowless': 'Shadowless', 'shadowless 1st-edition': 'Shadowless מהדורה ראשונה',
+            'first-edition': 'מהדורה ראשונה', 'unlimited': 'Unlimited', 'shadowless': 'Shadowless',
             '1999-2000-copyright': '1999-2000 copyright',
         };
         const variantRow = document.getElementById('variantRow');
@@ -648,13 +648,21 @@ body.search-focus .dev-notice,body.search-focus .intro-card,body.search-focus .l
                 const stamps = Array.isArray(e.stamp) ? e.stamp.map(x => String(x).toLowerCase()) : [];
                 const subtype = e.subtype ? String(e.subtype).toLowerCase() : null;
                 const firstEd = stamps.includes('1st-edition');
-                if (subtype && subtype !== 'unlimited') {
+                // Mirrors the server: unmodelled stamps become explicit
+                // no-data labels instead of merging into the plain variant.
+                const otherStamps = stamps.filter(s => s !== '1st-edition');
+                if (otherStamps.length) {
+                    unsupported.push((finish || String(e.type || 'unknown')) + ' stamp:' + otherStamps.join(','));
+                    continue;
+                }
+                if (subtype && subtype !== 'unlimited' && subtype !== 'shadowless') {
                     unsupported.push(firstEd ? subtype + ' 1st-edition' : subtype);
                     continue;
                 }
                 let edition = null;
                 if (firstEd) edition = 'first-edition';
                 else if (subtype === 'unlimited') edition = 'unlimited';
+                else if (subtype === 'shadowless') edition = 'shadowless';
                 if (!finish) { unsupported.push(String(e.type || 'unknown')); continue; }
                 const key = edition ? edition + '+' + finish : finish;
                 if (!options.includes(key)) options.push(key);

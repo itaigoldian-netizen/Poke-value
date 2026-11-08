@@ -47,8 +47,9 @@ const GRADED_TITLE = /\b(PSA|BGS|CGC|EAS|TAG|SGC|ACE)\s*-?\s*\d/i;
 // - 'shadowless' and any other unsupported subtype are explicit no-data
 //   variants: they are never selectable, never silently mapped to unlimited,
 //   and their titles never match any supported variant.
-const VARIANT_TOKENS = new Set(['first-edition', 'unlimited', 'holo', 'non-holo', 'reverse', 'w-promo']);
-const RE_1ST_ED = /\b1st[\s-]*(ed|edition)\b/i;
+const VARIANT_TOKENS = new Set(['first-edition', 'unlimited', 'shadowless', 'holo', 'non-holo', 'reverse', 'w-promo']);
+// Sellers write both '1st ed' and 'first edition'.
+const RE_1ST_ED = /\b1st[\s-]*(ed|edition)\b|\bfirst[\s-]*edition\b/i;
 const RE_UNLIMITED = /\bunlimited\b/i;
 const RE_SHADOWLESS = /\bshadowless\b/i;
 const RE_REVERSE = /\breverse[\s-]*(holo|holographic|foil)?/i;
@@ -63,9 +64,9 @@ export function normalizeVariant(raw) {
   const tokens = String(raw).toLowerCase().split('+').filter(Boolean);
   if (!tokens.length || tokens.length > 2) return null;
   for (const t of tokens) if (!VARIANT_TOKENS.has(t)) return null;
-  const editions = tokens.filter(t => t === 'first-edition' || t === 'unlimited');
+  const editions = tokens.filter(t => t === 'first-edition' || t === 'unlimited' || t === 'shadowless');
   if (editions.length > 1) return null;
-  const finishes = tokens.filter(t => t !== 'first-edition' && t !== 'unlimited');
+  const finishes = tokens.filter(t => t !== 'first-edition' && t !== 'unlimited' && t !== 'shadowless');
   return editions.concat(finishes).join('+'); // edition-first, matches variantOptionsFromDetail keys
 }
 
@@ -86,14 +87,28 @@ export function variantOptionsFromDetail(detailed) {
     const stamps = Array.isArray(e.stamp) ? e.stamp.map(x => String(x).toLowerCase()) : [];
     const subtype = e.subtype ? String(e.subtype).toLowerCase() : null;
     const firstEd = stamps.includes('1st-edition');
+    // A stamp other than 1st-edition (e.g. prerelease/staff/winner) has no
+    // modeled title-evidence path yet: it becomes an explicit no-data label
+    // instead of silently merging stamped sales into the plain variant.
+    const otherStamps = stamps.filter(s => s !== '1st-edition');
+    if (otherStamps.length) {
+      unsupported.push((finish || String(e.type || 'unknown')) + ' stamp:' + otherStamps.join(','));
+      continue;
+    }
     let edition = null;
-    if (subtype && subtype !== 'unlimited') {
-      // shadowless / 1999-2000-copyright / any unmodelled subtype: explicit no-data
+    if (subtype && subtype !== 'unlimited' && subtype !== 'shadowless') {
+      // 1999-2000-copyright and any unmodelled subtype: no reliable title
+      // evidence exists, so they stay explicit no-data variants.
       unsupported.push(firstEd ? subtype + ' 1st-edition' : subtype);
       continue;
     }
+    // Base Set first edition is physically shadowless (TCGdex: subtype
+    // 'shadowless' + stamp '1st-edition'); sellers state '1st edition', so
+    // that stamp is the edition evidence - requiring 'shadowless' too would
+    // zero the pool. Plain shadowless (no stamp) is its own edition.
     if (firstEd) edition = 'first-edition';
     else if (subtype === 'unlimited') edition = 'unlimited';
+    else if (subtype === 'shadowless') edition = 'shadowless';
     if (!finish) { unsupported.push(String(e.type || 'unknown')); continue; }
     const key = edition ? edition + '+' + finish : finish;
     if (!options.includes(key)) options.push(key);
@@ -114,6 +129,11 @@ function variantQueryTerms(variantKey) {
     else if (t === 'non-holo') terms.push('non holo');
     else if (t === 'reverse') terms.push('reverse holo');
     else if (t === 'w-promo') terms.push('w promo');
+    // 'shadowless' is REQUIRED title evidence for shadowless variants, so
+    // putting it in the query can only drop sales the filter would reject
+    // anyway. Edition terms 'unlimited'/'1st edition' stay out of the query:
+    // 1st edition is passed as the provider's first_edition option instead.
+    else if (t === 'shadowless') terms.push('shadowless');
   }
   return terms;
 }
@@ -125,17 +145,36 @@ function variantQueryTerms(variantKey) {
 // Contradictory phrases reject both directions: 'reverse holo'/'non-holo'
 // contain 'holo' but never count as holo, and a title stating both
 // '1st edition' and 'unlimited' matches neither edition.
-export function titleMatchesVariant(title, variantKey) {
+// cardFields (CompsAPI structured card object) is corroborating evidence
+// only: it can confirm 1st edition, and a structured first_edition===true
+// contradicts every non-1st-edition variant. It never overrides an explicit
+// title contradiction.
+export function titleMatchesVariant(title, variantKey, cardFields) {
   if (!variantKey) return true; // legacy aggregate path carries no variant
-  if (RE_SHADOWLESS.test(title)) return false;
+// cardFields (CompsAPI structured card object) is corroborating evidence
+// only: it can confirm 1st edition, and a structured first_edition===true
+// contradicts every non-1st-edition variant. It never overrides an explicit
+// title contradiction.
+export function titleMatchesVariant(title, variantKey, cardFields) {
   const tokens = variantKey.split('+');
-  const hasEd = tokens.includes('first-edition');
-  const hasUnl = tokens.includes('unlimited');
-  const finish = tokens.find(t => t !== 'first-edition' && t !== 'unlimited') || null;
-  if (hasEd && !(RE_1ST_ED.test(title) && !RE_UNLIMITED.test(title))) return false;
-  if (!hasEd && RE_1ST_ED.test(title)) return false;
-  if (hasUnl && !(RE_UNLIMITED.test(title) && !RE_1ST_ED.test(title))) return false;
-  if (!hasUnl && RE_UNLIMITED.test(title)) return false;
+  const edition = tokens.find(t => t === 'first-edition' || t === 'unlimited' || t === 'shadowless') || null;
+  const finish = tokens.find(t => t !== 'first-edition' && t !== 'unlimited' && t !== 'shadowless') || null;
+  const structFirstEd = !!(cardFields && cardFields.first_edition === true);
+  if (edition === 'first-edition') {
+    if (!RE_1ST_ED.test(title) && !structFirstEd) return false;
+    if (RE_UNLIMITED.test(title)) return false;
+  } else {
+    if (RE_1ST_ED.test(title) || structFirstEd) return false;
+  }
+  if (edition === 'unlimited' && !RE_UNLIMITED.test(title)) return false;
+  if (!edition && RE_UNLIMITED.test(title)) return false;
+  if (edition === 'shadowless') {
+    if (!RE_SHADOWLESS.test(title)) return false;
+  } else if (edition !== 'first-edition' && RE_SHADOWLESS.test(title)) {
+    // Base Set 1st edition IS shadowless, so a 1st-edition variant tolerates
+    // the word; every other variant rejects it.
+    return false;
+  }
   if (finish === 'holo' && !(RE_HOLO.test(title) && !RE_REVERSE.test(title) && !RE_NONHOLO.test(title))) return false;
   if (finish === 'non-holo' && !(RE_NONHOLO.test(title) && !RE_REVERSE.test(title))) return false;
   if (finish === 'reverse' && !(RE_REVERSE.test(title) && RE_HOLO.test(title) && !RE_NONHOLO.test(title))) return false;
@@ -229,9 +268,18 @@ function escapeRegExp(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
 // and the set year is known they must agree, which rejects dated reprints
 // (e.g. a 2021 'Celebrations Classic 4/102' in a 1999 Base Set cell) without
 // any claim that a marker list is exhaustive.
+//
+// Number evidence is the SLASH form only ('4/102', number/printed-total),
+// matched in the title or in the provider's structured card.card_number
+// field. The bare '#4' form was dropped (Nov8): it is not printing identity,
+// because sets reuse collector numbers - Base Set 2 Charizard is also #4, so
+// '#4' + 'base set' tokens matched Base Set 2 sales into Base Set cells.
 const RE_TITLE_YEAR = /\b(19|20)\d{2}\b/;
 const RE_REPRINT_COLLECTION = /\b(celebrations|classic collection|anniversary|mcdonald'?s|trick or trade)\b/i;
-export function titleMatchesPrinting(title, printing, language) {
+function slashNumberRegex(localId, official) {
+  return new RegExp('\\b0*' + escapeRegExp(localId) + '\\s*/\\s*0*' + escapeRegExp(String(official)) + '(?!\\d)', 'i');
+}
+export function titleMatchesPrinting(title, printing, language, cardFields) {
   const t = String(title || '');
   if (!printing || !t) return false;
   const lower = t.toLowerCase();
@@ -244,10 +292,14 @@ export function titleMatchesPrinting(title, printing, language) {
     setOk = new RegExp('\\b' + escapeRegExp(printing.setId) + '\\b', 'i').test(t);
   }
   if (!setOk) return false;
-  // Number evidence: '017/184' strongest; '#017' accepted with set evidence.
-  const hasSlash = printing.numberSlash ? t.includes(printing.numberSlash) : false;
-  const hasHash = new RegExp('#\\s*0*' + escapeRegExp(printing.localId) + '(?!\\d)').test(t);
-  if (!hasSlash && !hasHash) return false;
+  // Number evidence: '4/102' in the title, zero-padding tolerant, or the
+  // provider's structured card_number field parsed from that title.
+  const official = printing.numberSlash ? printing.numberSlash.split('/')[1] : null;
+  const re = official ? slashNumberRegex(printing.localId, official) : null;
+  const hasSlash = re ? re.test(t) : false;
+  const structuredNumber = cardFields && cardFields.card_number ? String(cardFields.card_number).trim() : '';
+  const hasStructuredSlash = re ? re.test(structuredNumber) : false;
+  if (!hasSlash && !hasStructuredSlash) return false;
   // Year consistency (only when the title states a year)
   if (printing.year) {
     const ym = t.match(RE_TITLE_YEAR);
@@ -416,7 +468,10 @@ async function fetchScraperApiSales(cardQuery, grader, grade, language, variantK
     }
   }
 
-  return listings.slice(0, 10);
+  // Owner rule: a cell price comes from the latest THREE accepted sales, not
+  // ten. This dormant fallback has no sale dates, so it takes the provider's
+  // own newest-first order and honestly reports the count used.
+  return listings.slice(0, 3);
 }
 
 // --- CompsAPI (https://api.compsapi.com, docs: compsapi.com/docs) ---
@@ -434,26 +489,35 @@ async function fetchCompsApiSales(cardQuery, grader, grade, language, variantKey
   }
   const isRaw = grader === 'RAW';
 
-  // One request per cell (the click model). /v1/comps is the right endpoint:
-  // it scans the newest 200 sales over 90 days and returns the 10 newest that
-  // match the card options, while /v1/sold filters only the single page it
-  // fetched and can miss graded sales entirely (verified live Nov7: a PSA 9
-  // cell that /v1/sold page 1 filtered to 0 came back with real sales here).
-  // Grader+grade are passed as card options, not spelled into q, per the docs.
+  // One request per cell (the click model). /v1/sold with the maximum page
+  // size: it returns up to 240 newest matching sales (docs: "newest sale
+  // first", size 10..240) with the same card options as /v1/comps, so the
+  // strict local filters below judge up to 240 candidates instead of the 10
+  // newest items /v1/comps exposes. That is the Nov8 repair for cells whose
+  // 10-item slice happened to contain no title with positive printing
+  // evidence. Grader+grade are passed as card options, not spelled into q,
+  // per the docs.
   const qTerms = variantKey ? cardQuery + ' ' + variantQueryTerms(variantKey).join(' ') : cardQuery;
-  const params = new URLSearchParams({ q: qTerms, exclude: 'junk' });
+  const params = new URLSearchParams({ q: qTerms, exclude: 'junk', size: '240' });
   if (isRaw) {
     params.set('graded', 'false');
   } else {
     params.set('grader', grader);
     params.set('grade', String(grade));
   }
+  // Edition evidence the provider parses itself: 1st-edition variants ask for
+  // the first_edition option (docs: "1st edition cards only (or false for
+  // none)"), and every other variant excludes detected 1st-edition sales.
+  // Local checks below still verify; the option only narrows the pool.
+  if (variantKey) {
+    params.set('first_edition', variantKey.split('+').includes('first-edition') ? 'true' : 'false');
+  }
   // English is NOT filtered server-side: the lang option drops every title
   // that names no language, which is most English sales. For English we pass
   // no lang and drop the few foreign-tagged rows locally instead.
   if (language !== 'English') params.set('lang', COMPS_LANG[language]);
 
-  const endpoint = 'https://api.compsapi.com/v1/comps?' + params.toString();
+  const endpoint = 'https://api.compsapi.com/v1/sold?' + params.toString();
   const response = await fetch(endpoint, { headers: { 'X-API-Key': key } });
   if (response.status === 429) {
     // Monthly quota reached: the key pauses until the UTC month resets. No
@@ -470,7 +534,7 @@ async function fetchCompsApiSales(cardQuery, grader, grade, language, variantKey
   } catch (e) {
     throw new Error('unexpected response format from sales provider');
   }
-  if (!body || body.ok !== true || !Array.isArray(body.items)) {
+  if (!body || !Array.isArray(body.items)) {
     throw new Error('unexpected response format from sales provider');
   }
 
@@ -495,12 +559,23 @@ async function fetchCompsApiSales(cardQuery, grader, grade, language, variantKey
       if (String(c.grade || '') !== String(grade)) continue;
     }
 
-    if (!titleMatchesVariant(String(item.title || ''), variantKey)) continue;
-    // Printing identity evidence (Nov8): required for every counted sale.
-    if (printing && !titleMatchesPrinting(String(item.title || ''), printing, language)) continue;
+    const title = String(item.title || '');
+    if (!titleMatchesVariant(title, variantKey, c)) continue;
+    // Printing identity evidence (Nov8): required for every counted sale; the
+    // provider's structured card_number is accepted as slash-number evidence.
+    if (printing && !titleMatchesPrinting(title, printing, language, c)) continue;
+    // Owner rule: the price is computed from the latest THREE accepted sales.
+    // A sale without a verifiable date cannot prove recency, so it never
+    // enters the cell.
+    const date = item.last_sold ? new Date(item.last_sold) : null;
+    if (!date || isNaN(date.getTime())) continue;
 
-    listings.push({ price: item.price, date: item.last_sold || null, title: String(item.title || '') });
+    listings.push({ price: item.price, date: item.last_sold, title });
   }
 
-  return listings.slice(0, 10);
+  // Never trust the provider's order: sort by the sale date itself, newest
+  // first, and keep the latest three. Fewer than three is reported honestly
+  // through the sales count; printings are never mixed to reach three.
+  listings.sort((a, b) => new Date(b.date) - new Date(a.date));
+  return listings.slice(0, 3);
 }
