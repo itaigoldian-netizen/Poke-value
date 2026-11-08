@@ -40,7 +40,11 @@ const CACHE_TTL_MS = 14 * 24 * 60 * 60 * 1000;
 // arithmetic means (owner instruction Nov8 16:17), so a cached c3 median must
 // never be served as a mean. c3 rows stay in the table as provenance but are
 // never read. c2 keys (old TCGdex-id query format) remain unread as before.
+// c5: (Nov8 17:51, owner: no medians anywhere) re-keys RAW rows only: c4 RAW
+// rows are medians and must never be served as means; c4 foreign-graded rows
+// were always means and stay valid, so their cache is kept.
 const CACHE_KEY_PREFIX = 'c4:';
+const RAW_CACHE_KEY_PREFIX = 'c5:';
 
 function errMsg(err) {
   let m = err && err.message ? err.message : String(err);
@@ -53,7 +57,8 @@ function errMsg(err) {
 // The resolved variant is ALWAYS part of the key (Main review Nov7 22:25):
 // every lookup is variant-scoped, even for single-variant printings.
 function cacheKeyFor(queryKey, grader, variantKey) {
-  return CACHE_KEY_PREFIX + providerCacheTag() + ':' + queryKey + '|' + grader.toLowerCase() + '|v:' + variantKey;
+  const prefix = grader === 'RAW' ? RAW_CACHE_KEY_PREFIX : CACHE_KEY_PREFIX;
+  return prefix + providerCacheTag() + ':' + queryKey + '|' + grader.toLowerCase() + '|v:' + variantKey;
 }
 
 export default async function handler(req, res) {
@@ -174,21 +179,12 @@ export default async function handler(req, res) {
       return res.status(404).json({ error: 'No data found' });
     }
 
+    // Owner instruction Nov8 17:51: nothing on the site is computed with a
+    // median. Foreign grader companies (PSA/BGS/CGC/SGC/TAG) and RAW alike:
+    // simple arithmetic mean. RAW stays honestly labeled as condition-mixed.
     const prices = sales.map(s => s.price);
-    // Foreign grader companies (PSA/BGS/CGC/SGC/TAG): simple arithmetic mean
-    // (owner instruction Nov8 16:17). RAW stays on the median - the mean
-    // instruction covered the grading companies only, and raw-sale condition
-    // variance makes a mean misleading without a condition field.
-    let finalPrice;
-    if (isRaw) {
-      prices.sort((a, b) => a - b);
-      const half = Math.floor(prices.length / 2);
-      const median = prices.length % 2 ? prices[half] : (prices[half - 1] + prices[half]) / 2;
-      finalPrice = Math.round(median * 100) / 100;
-    } else {
-      const mean = prices.reduce((sum, p) => sum + p, 0) / prices.length;
-      finalPrice = Math.round(mean * 100) / 100;
-    }
+    const mean = prices.reduce((sum, p) => sum + p, 0) / prices.length;
+    const finalPrice = Math.round(mean * 100) / 100;
 
     const payload = {
       card_name: variantInfo.cardName,

@@ -171,7 +171,7 @@ body.search-focus .dev-notice,body.search-focus .intro-card,body.search-focus .l
                     </table>
                 </div>
                 <p class="pv-chart-note">לחיצה על תא טוענת שווי של אותה חברה וציון ממכירות שהסתיימו בפועל. מחיר שמור מוצג עם תאריך העדכון שלו.</p>
-                <p class="pv-chart-note">כל התאים מציגים מכירות בפועל של אותה חברת דירוג. עמודת EAS מציגה חציון של דיווחי העסקאות שאושרו באתר, ואינה נטענת ממקור חיצוני; הערכת EAS בנוסחה מנתוני ארבע החברות עדיין בבדיקה ואינה מוצגת. ערך "לא מדורג" מגיע ממכירות של קלפים לא מדורגים, אך אין במקור הפרדת מצב, ולכן הוא מכסה מצבים מעורבים.</p>
+                <p class="pv-chart-note">כל התאים מציגים מכירות בפועל של אותה חברת דירוג. עמודת EAS מציגה ממוצע של דיווחי העסקאות שאושרו באתר, ואינה נטענת ממקור חיצוני; הערכת EAS בנוסחה מנתוני ארבע החברות עדיין בבדיקה ואינה מוצגת. ערך "לא מדורג" מגיע ממכירות של קלפים לא מדורגים, אך אין במקור הפרדת מצב, ולכן הוא מכסה מצבים מעורבים.</p>
                 <div id="historySection" class="hidden">
                     <h3 class="pv-sales-title">היסטוריית מחירים</h3>
                     <div id="historyChart" dir="ltr"></div>
@@ -808,7 +808,7 @@ body.search-focus .dev-notice,body.search-focus .intro-card,body.search-focus .l
             const condTxt = isRaw ? '<span class="m cond">מצב לא ידוע - מכירות מעורבות</span>' : '';
             // Community (EAS) cells count approved site deal reports, not
             // external sales. Currencies are never converted or mixed: when a
-            // cell has reports in both currencies, both medians are labeled.
+            // cell has reports in both currencies, both averages are labeled.
             let priceTxt, salesTxt;
             const curKeys = perCurrency ? Object.keys(perCurrency) : [];
             if (source === 'community' && curKeys.length > 1) {

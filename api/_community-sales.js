@@ -18,13 +18,12 @@
 // computed live instead of served from a 14-day cache.
 //
 // Currencies are never converted (no approved FX source): each cell reports a
-// median per currency; the primary display currency is the one with more
-// reports, ties going to ILS (the local market).
+// simple arithmetic MEAN per currency (owner instruction Nov8 17:51: nothing
+// on the site uses a median); the primary display currency is the one with
+// more reports, ties going to ILS (the local market).
 
-function median(nums) {
-  const a = nums.slice().sort((x, y) => x - y);
-  const h = Math.floor(a.length / 2);
-  return a.length % 2 ? a[h] : (a[h - 1] + a[h]) / 2;
+function arithmeticMean(nums) {
+  return nums.reduce((sum, n) => sum + n, 0) / nums.length;
 }
 
 function buildCell(grade, sales) {
@@ -32,7 +31,7 @@ function buildCell(grade, sales) {
   for (const s of sales) (byCur[s.currency] = byCur[s.currency] || []).push(s.price);
   const per = {};
   for (const c of Object.keys(byCur)) {
-    per[c] = { price: Math.round(median(byCur[c]) * 100) / 100, count: byCur[c].length };
+    per[c] = { price: Math.round(arithmeticMean(byCur[c]) * 100) / 100, count: byCur[c].length };
   }
   const primary = Object.keys(per).sort((a, b) => per[b].count - per[a].count || (a === 'ILS' ? -1 : 1))[0];
   const latest = sales.map(s => s.trade_date).filter(Boolean).sort().pop() || null;

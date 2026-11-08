@@ -114,12 +114,11 @@ export default async function handler(req, res) {
       }
 
       if (sales.length > 0) {
+        // Owner instruction Nov8 17:51: simple arithmetic mean, never a median.
         const prices = sales.map(s => s.price);
-        prices.sort((a, b) => a - b);
-        const half = Math.floor(prices.length / 2);
-        const median = prices.length % 2 ? prices[half] : (prices[half - 1] + prices[half]) / 2;
+        const mean = prices.reduce((sum, p) => sum + p, 0) / prices.length;
 
-        perGraderResults[grader] = { price: median, count: sales.length };
+        perGraderResults[grader] = { price: Math.round(mean * 100) / 100, count: sales.length };
         totalSalesCount += sales.length;
       } else {
         perGraderResults[grader] = { price: null, count: 0 };

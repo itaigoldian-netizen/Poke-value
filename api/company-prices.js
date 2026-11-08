@@ -18,7 +18,12 @@ const LANGUAGES = ['English', 'Japanese', 'Chinese', 'Korean'];
 // Mirrors api/company-price.js: cache namespace and validity must match the
 // click endpoint exactly, or the auto-displayed values would drift from what
 // a click would show.
-const CACHE_KEY_PREFIX = 'c4:'; // mirrors company-price.js: c4 = mean-method namespace (Nov8 owner-approved valuation change); c3 medians are provenance only, never served
+// Mirrors api/company-price.js: c4 = mean-method namespace for foreign
+// graders (Nov8 owner-approved valuation change); c3 medians are provenance
+// only, never served. c5 (Nov8 17:51: no medians anywhere) re-keys RAW rows;
+// a c4 RAW row is a stale median and is never served.
+const CACHE_KEY_PREFIX = 'c4:';
+const RAW_CACHE_KEY_PREFIX = 'c5:';
 const CACHE_TTL_MS = 14 * 24 * 60 * 60 * 1000;
 
 function errMsg(err) {
@@ -67,7 +72,9 @@ export default async function handler(req, res) {
 
   // Same derivation as the click endpoint: the client query is never trusted.
   const queryKey = variantInfo.derivedQuery.toLowerCase().replace(/\s+/g, ' ');
-  const keyPrefix = CACHE_KEY_PREFIX + providerCacheTag() + ':' + queryKey + '|';
+  const tag = providerCacheTag() + ':' + queryKey + '|';
+  const keyPrefix = CACHE_KEY_PREFIX + tag;
+  const rawKeyPrefix = RAW_CACHE_KEY_PREFIX + tag;
 
   try {
     const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
@@ -76,7 +83,7 @@ export default async function handler(req, res) {
       .from('price_cache')
       .select('*')
       .eq('language', language)
-      .like('card_key', keyPrefix + '%');
+      .or(`card_key.like.${keyPrefix}%,card_key.like.${rawKeyPrefix}%`);
 
     if (error) {
       console.error('cached prices read failed: ' + errMsg(error));
@@ -92,9 +99,12 @@ export default async function handler(req, res) {
       // Every c2: row is variant-scoped: only cells stored for THIS resolved
       // variant auto-display, for single-variant printings too.
       .filter(r => String(r.card_key).endsWith('|v:' + variantKey))
+      // A c4 RAW row predates the no-medians rule (Nov8 17:51) and is a
+      // median: never serve it. RAW cells are served from c5 rows only.
+      .filter(r => !(String(r.card_key).startsWith(CACHE_KEY_PREFIX) && String(r.card_key).toLowerCase().includes('|raw|')))
       .filter(r => (now - new Date(r.updated_at).getTime()) < CACHE_TTL_MS)
       .map(r => ({
-        grader: String(r.card_key).slice(keyPrefix.length).split('|')[0].toUpperCase(),
+        grader: String(r.card_key).split('|')[1].toUpperCase(),
         grade: r.grade,
         price: r.price,
         total_sales: r.sample_count,
