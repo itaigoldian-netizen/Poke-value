@@ -1,8 +1,8 @@
 // Deterministic isolation tests for the sales-matching rules (no network).
-// Run: node --experimental-detect-module --test tests/
+// Run: node --experimental-detect-module --test api/tests/
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { titleMatchesPrinting, titleMatchesVariant, variantOptionsFromDetail, normalizeVariant } from '../api/_sales-provider.js';
+import { titleMatchesPrinting, titleMatchesVariant, variantOptionsFromDetail, normalizeVariant } from '../_sales-provider.js';
 
 const BASE1 = { setId: 'base1', setName: 'Base Set', setToken: 'Base Set', localId: '4', official: 102, year: 1999, numberSlash: '4/102' };
 const CGC10 = { graded: true, grader: 'CGC', grade: '10', grade_label: null, card_number: '4/102', year: 1999, language: 'en', first_edition: false, flags: [] };
@@ -80,7 +80,7 @@ test('normalizeVariant: shadowless is an edition token', () => {
   assert.equal(normalizeVariant('unlimited+shadowless'), null);
 });
 
-import { acceptsGradedSale, titleMatchesSpecialGrade, titleSpecialEvidence } from '../api/_sales-provider.js';
+import { acceptsGradedSale, titleMatchesSpecialGrade, titleSpecialEvidence } from '../_sales-provider.js';
 
 test('special grade: normal-10 exclusion is per grader', () => {
   // CGC specials: Pristine 10 and Perfect 10 never enter a normal CGC 10.
