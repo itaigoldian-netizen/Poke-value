@@ -8,14 +8,15 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif;background:#f8fafc;color:#1e293b;line-height:1.7}
-header{background:#fff;border-bottom:1px solid #e2e8f0;padding:20px 16px;box-shadow:0 1px 2px rgba(0,0,0,.05)}
+body{font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif;background:linear-gradient(160deg,#fef9c3 0%,#fef3c7 20%,#eff6ff 48%,#f5f3ff 76%,#fdf2f8 100%) fixed;color:#1e293b;line-height:1.7}
+header{background:#fff;border-bottom:3px solid transparent;border-image:linear-gradient(90deg,#f59e0b,#ef4444,#8b5cf6,#3b82f6,#10b981) 1;padding:20px 16px;box-shadow:0 1px 2px rgba(0,0,0,.05)}
 header .wrap{max-width:48rem;margin:0 auto;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px}
 h1{font-size:1.5rem;font-weight:800}
 h1 span{color:#2563eb}
 nav a{color:#2563eb;text-decoration:underline;margin:0 8px;font-size:0.95rem}
 main{max-width:48rem;margin:0 auto;padding:32px 16px 48px}
-section{background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:20px 24px;margin-bottom:20px;box-shadow:0 1px 2px rgba(0,0,0,.05)}
+section{background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:20px 24px;margin-bottom:20px;box-shadow:0 4px 14px rgba(30,27,75,.07)}
+main section:nth-of-type(2){border-inline-start:4px solid #f59e0b}
 h2{font-size:1.2rem;font-weight:700;color:#1e293b;margin-bottom:10px}
 p{margin-bottom:10px;color:#475569}
 strong{color:#1e293b}
@@ -23,11 +24,14 @@ footer{background:#fff;border-top:1px solid #e2e8f0;padding:24px 16px;text-align
 footer .disclaimer{color:#64748b;font-size:0.85rem;max-width:40rem;margin:8px auto 0}
 footer .credit{color:#64748b;font-size:0.85rem;max-width:40rem;margin:8px auto 0}
 .updated{color:#64748b;font-size:0.85rem}
-.page-intro h2{font-size:1.6rem;font-weight:800;color:#0f172a;margin-bottom:4px}
-.page-sub{color:#64748b;font-size:.95rem;margin-bottom:18px}
+.page-intro{background:linear-gradient(120deg,#7c3aed 0%,#4f46e5 40%,#2563eb 75%,#0ea5e9 100%);border-radius:18px;padding:26px 26px 24px;margin-bottom:24px;box-shadow:0 10px 26px rgba(79,70,229,.28);position:relative;overflow:hidden}
+.page-intro::before{content:"";position:absolute;width:220px;height:220px;border-radius:50%;background:rgba(253,224,71,.28);top:-90px;left:-50px}
+.page-intro::after{content:"";position:absolute;width:140px;height:140px;border-radius:50%;background:rgba(255,255,255,.14);bottom:-60px;right:-30px}
+.page-intro h2{font-size:1.8rem;font-weight:800;color:#fff;margin-bottom:4px;text-shadow:0 2px 10px rgba(30,27,75,.4);position:relative}
+.page-sub{color:#e0e7ff;font-size:1rem;margin-bottom:0;position:relative}
 .articles-grid{display:flex;flex-direction:column;gap:22px;margin-top:8px}
-.article-card{background:#fff;border:1px solid #e2e8f0;border-radius:16px;overflow:hidden;box-shadow:0 2px 10px rgba(15,23,42,.06);transition:transform .18s,box-shadow .18s}
-.article-card:hover{transform:translateY(-3px);box-shadow:0 10px 26px rgba(15,23,42,.12)}
+.article-card{background:#fff;border:none;border-radius:16px;overflow:hidden;box-shadow:0 6px 20px rgba(30,27,75,.10);transition:transform .18s,box-shadow .18s}
+.article-card:hover{transform:translateY(-4px);box-shadow:0 14px 32px rgba(30,27,75,.16)}
 .card-hero{display:block;width:100%;aspect-ratio:16/9;object-fit:cover;background:#eff6ff}
 .card-fallback{aspect-ratio:16/9;background:linear-gradient(135deg,#1d4ed8 0%,#2563eb 45%,#60a5fa 100%);display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden}
 .card-fallback::before,.card-fallback::after{content:"";position:absolute;border-radius:50%;background:rgba(255,255,255,.12)}
@@ -36,13 +40,13 @@ footer .credit{color:#64748b;font-size:0.85rem;max-width:40rem;margin:8px auto 0
 .card-fallback .brand{color:#fff;font-weight:800;font-size:1.6rem;letter-spacing:.5px;text-shadow:0 2px 8px rgba(30,64,175,.45)}
 .card-body{padding:18px 22px 20px}
 .card-meta{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px}
-.chip{display:inline-block;background:#eff6ff;color:#1d4ed8;font-size:.78rem;font-weight:700;padding:3px 10px;border-radius:999px}
+.chip{display:inline-block;background:linear-gradient(90deg,#f59e0b,#f97316);color:#fff;font-size:.78rem;font-weight:700;padding:3px 12px;border-radius:999px;box-shadow:0 2px 6px rgba(249,115,22,.35)}
 .card-date{color:#64748b;font-size:.82rem}
 .article-card h3{font-size:1.25rem;font-weight:800;color:#0f172a;line-height:1.45;margin-bottom:8px}
 .card-excerpt{color:#475569;font-size:.95rem}
 .card-full{margin-top:4px}
-.read-more{background:none;border:none;color:#2563eb;font-weight:700;font-size:.92rem;cursor:pointer;padding:8px 0 0;font-family:inherit}
-.read-more:hover{color:#1d4ed8;text-decoration:underline}
+.read-more{background:linear-gradient(90deg,#4f46e5,#7c3aed);color:#fff;border:none;padding:8px 18px;border-radius:999px;font-weight:700;font-size:.9rem;cursor:pointer;margin-top:10px;font-family:inherit;box-shadow:0 3px 10px rgba(79,70,229,.30);transition:filter .15s}
+.read-more:hover{filter:brightness(1.1)}
 .card-src{margin-top:12px;padding-top:12px;border-top:1px solid #f1f5f9;font-size:.85rem;color:#64748b}
 .card-src a{color:#2563eb;font-weight:600}
 .empty-state{color:#64748b;font-style:italic}
@@ -55,13 +59,13 @@ footer .credit{color:#64748b;font-size:0.85rem;max-width:40rem;margin:8px auto 0
 .news-note{color:#64748b;font-size:0.85rem;margin-top:12px}
 .news-error{color:#713f12}
 .hidden{display:none}
-button.btn{background:#2563eb;color:#fff;border:none;padding:10px 22px;border-radius:10px;font-weight:600;font-size:1rem;cursor:pointer;transition:background .15s}
-button.btn:hover{background:#1d4ed8}
+button.btn{background:linear-gradient(90deg,#4f46e5,#7c3aed);color:#fff;border:none;padding:10px 22px;border-radius:10px;font-weight:600;font-size:1rem;cursor:pointer;transition:filter .15s;box-shadow:0 3px 10px rgba(79,70,229,.30)}
+button.btn:hover{filter:brightness(1.1)}
 button.btn:disabled{opacity:.6;cursor:default}
 button.btn.link{background:#fff;border:1px solid #2563eb;color:#2563eb;text-decoration:none}
 button.btn.link:hover{background:#eff6ff}
-a.btn{background:#2563eb;color:#fff;border:none;padding:10px 22px;border-radius:10px;font-weight:600;font-size:1rem;cursor:pointer;transition:background .15s;display:inline-block;text-decoration:none}
-a.btn:hover{background:#1d4ed8}
+a.btn{background:linear-gradient(90deg,#4f46e5,#7c3aed);color:#fff;border:none;padding:10px 22px;border-radius:10px;font-weight:600;font-size:1rem;cursor:pointer;transition:filter .15s;display:inline-block;text-decoration:none;box-shadow:0 3px 10px rgba(79,70,229,.30)}
+a.btn:hover{filter:brightness(1.1)}
     </style>
 </head>
 <body>
@@ -141,7 +145,7 @@ a.btn:hover{background:#1d4ed8}
                 document.getElementById('empty-state').style.display = 'none';
                 var box = document.getElementById('own-articles');
                 box.className = 'articles-grid';
-                res.data.forEach(function(a){
+                res.data.forEach(function(a, idx){
                     var card = document.createElement('article');
                     card.className = 'article-card';
                     // תמונה ראשית אם הוגדרה בכתבה; אחרת פס מעוצב עם שם האתר
@@ -151,10 +155,10 @@ a.btn:hover{background:#1d4ed8}
                         img.src = a.image_url;
                         img.alt = a.title || '';
                         img.loading = 'lazy';
-                        img.addEventListener('error', function(){ img.replaceWith(makeFallback()); });
+                        img.addEventListener('error', function(){ img.replaceWith(makeFallback(idx)); });
                         card.appendChild(img);
                     } else {
-                        card.appendChild(makeFallback());
+                        card.appendChild(makeFallback(idx));
                     }
                     var body = document.createElement('div');
                     body.className = 'card-body';
@@ -234,11 +238,22 @@ a.btn:hover{background:#1d4ed8}
                 });
             });
 
-        function makeFallback(){
+        var PALETTES = [
+            ['linear-gradient(135deg,#7c3aed,#4f46e5 55%,#3b82f6)','#ffffff'],
+            ['linear-gradient(135deg,#f59e0b,#f97316 55%,#ef4444)','#ffffff'],
+            ['linear-gradient(135deg,#10b981,#0d9488 55%,#0ea5e9)','#ffffff'],
+            ['linear-gradient(135deg,#ec4899,#d946ef 55%,#8b5cf6)','#ffffff'],
+            ['linear-gradient(135deg,#fde047,#fbbf24 55%,#f97316)','#713f12']
+        ];
+
+        function makeFallback(idx){
+            var p = PALETTES[(idx || 0) % PALETTES.length];
             var band = document.createElement('div');
             band.className = 'card-fallback';
+            band.style.background = p[0];
             var b = document.createElement('span');
             b.className = 'brand';
+            b.style.color = p[1];
             b.textContent = 'Poke Value';
             band.appendChild(b);
             return band;
