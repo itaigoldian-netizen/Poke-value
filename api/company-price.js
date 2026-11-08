@@ -35,12 +35,12 @@ const CACHE_TTL_MS = 14 * 24 * 60 * 60 * 1000;
 // Version-tagged cache key, separate namespace from the EAS estimate rows
 // ('s2:'). The grader is part of the key because the shared table's unique
 // constraint is (card_key, language, grade). Raw rows use grade 0.
-// c3: is a FRESH namespace (Nov8 canonical-query repair, Main-approved):
-// keys under c2 were built from the old TCGdex-id query format and must never
-// be read for canonical-format cells. (c2 itself was fresh per Main Nov7 22:25.)
-// variant separation could hold mixed-variant data, so none of them is ever
-// served again - not even for single-variant cards.
-const CACHE_KEY_PREFIX = 'c3:';
+// c4: is a FRESH namespace (Nov8 valuation-method change, owner-approved):
+// c3 rows were computed as MEDIANS. Foreign-company cells are now simple
+// arithmetic means (owner instruction Nov8 16:17), so a cached c3 median must
+// never be served as a mean. c3 rows stay in the table as provenance but are
+// never read. c2 keys (old TCGdex-id query format) remain unread as before.
+const CACHE_KEY_PREFIX = 'c4:';
 
 function errMsg(err) {
   let m = err && err.message ? err.message : String(err);
@@ -175,10 +175,20 @@ export default async function handler(req, res) {
     }
 
     const prices = sales.map(s => s.price);
-    prices.sort((a, b) => a - b);
-    const half = Math.floor(prices.length / 2);
-    const median = prices.length % 2 ? prices[half] : (prices[half - 1] + prices[half]) / 2;
-    const finalPrice = Math.round(median * 100) / 100;
+    // Foreign grader companies (PSA/BGS/CGC/TAG): simple arithmetic mean
+    // (owner instruction Nov8 16:17). RAW stays on the median - the mean
+    // instruction covered the grading companies only, and raw-sale condition
+    // variance makes a mean misleading without a condition field.
+    let finalPrice;
+    if (isRaw) {
+      prices.sort((a, b) => a - b);
+      const half = Math.floor(prices.length / 2);
+      const median = prices.length % 2 ? prices[half] : (prices[half - 1] + prices[half]) / 2;
+      finalPrice = Math.round(median * 100) / 100;
+    } else {
+      const mean = prices.reduce((sum, p) => sum + p, 0) / prices.length;
+      finalPrice = Math.round(mean * 100) / 100;
+    }
 
     const payload = {
       card_name: variantInfo.cardName,

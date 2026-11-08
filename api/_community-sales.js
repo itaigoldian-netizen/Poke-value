@@ -62,12 +62,24 @@ export async function fetchEasCommunityCells(supabase, tcgId, language, variantK
     .eq('grader', 'EAS')
     .eq('variant', variantKey);
   if (error) return { error };
+  // Recency (owner instruction Nov8 16:17): an approved report enters an EAS
+  // cell only when its actual sale date is within the last 6 months. A report
+  // without a verifiable sale date can never prove recency, so it stays
+  // display-only in the deals list and never enters a cell.
+  const now = new Date();
+  const cutoff = new Date(now);
+  const targetMonth = ((cutoff.getMonth() - 6) % 12 + 12) % 12;
+  cutoff.setMonth(cutoff.getMonth() - 6);
+  if (cutoff.getMonth() !== targetMonth) cutoff.setDate(0); // e.g. Aug 31 -> Feb 28, never Mar 3
+  cutoff.setHours(0, 0, 0, 0); // date granularity: the boundary date counts for the whole day
   const byGrade = new Map();
   for (const r of data || []) {
     const g = Number(r.grade);
     if (!Number.isInteger(g) || g < 1 || g > 10) continue;
     const p = Number(r.price);
     if (!isFinite(p) || p <= 0) continue;
+    const d = r.trade_date ? new Date(r.trade_date) : null;
+    if (!d || isNaN(d.getTime()) || d < cutoff || d > now) continue;
     const cur = r.currency === 'USD' ? 'USD' : 'ILS';
     if (!byGrade.has(g)) byGrade.set(g, []);
     byGrade.get(g).push({ price: p, currency: cur, trade_date: r.trade_date });

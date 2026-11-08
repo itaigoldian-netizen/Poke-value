@@ -18,7 +18,7 @@ const LANGUAGES = ['English', 'Japanese', 'Chinese', 'Korean'];
 // Mirrors api/company-price.js: cache namespace and validity must match the
 // click endpoint exactly, or the auto-displayed values would drift from what
 // a click would show.
-const CACHE_KEY_PREFIX = 'c3:'; // canonical-query namespace, mirrors company-price.js (Nov8 repair, Main-approved)
+const CACHE_KEY_PREFIX = 'c4:'; // mirrors company-price.js: c4 = mean-method namespace (Nov8 owner-approved valuation change); c3 medians are provenance only, never served
 const CACHE_TTL_MS = 14 * 24 * 60 * 60 * 1000;
 
 function errMsg(err) {

@@ -14,7 +14,9 @@ window.PV_AUTH_ENABLED = true;
 window.PokeAuth = (function(){
   var SUPABASE_URL = 'https://yfxsvmujskqvtlnnfvog.supabase.co';
   var SUPABASE_ANON_KEY = 'sb_publishable_9rKl0u1M4cndyvhN4wzA0A_zbsmtFch';
-  var OWNER_ID = 'b362f086-9c13-45c6-b890-d222459275b9';
+  // בעלים מלאים (8/11 16:20, אושר במפורש): שני החשבונות המאומתים. ההרשאה
+  // האמיתית נאכפת ב-RLS/b_is_admin בשרת; כאן רק חוויית משתמש.
+  var OWNER_IDS = ['b362f086-9c13-45c6-b890-d222459275b9', 'b7569c9d-eb42-4c7d-ab0c-8ae81ac6ed25'];
   var client = null;
   var currentUser = null;
   var subscriber = null; // null = unknown, false = guest/no entitlement, true = active
@@ -29,7 +31,7 @@ window.PokeAuth = (function(){
       if (!currentUser){ subscriber = false; return null; }
       return client.from('subscriptions').select('user_id').eq('user_id', currentUser.id).eq('status', 'active').maybeSingle()
         .then(function(r){
-          subscriber = currentUser.id === OWNER_ID || !!(r && r.data);
+          subscriber = OWNER_IDS.indexOf(currentUser.id) >= 0 || !!(r && r.data);
           return currentUser;
         });
     });
@@ -53,7 +55,7 @@ window.PokeAuth = (function(){
   function user(){ return currentUser; }
   function isSubscriber(){ return subscriber === true; }
   function isSignedIn(){ return !!currentUser; }
-  function isOwner(){ return !!currentUser && currentUser.id === OWNER_ID; }
+  function isOwner(){ return !!currentUser && OWNER_IDS.indexOf(currentUser.id) >= 0; }
 
   // כפתור התחברות/התנתקות קטן ב-header. נקרא מהדפים אחרי ready().
   function mountHeaderButton(container){
