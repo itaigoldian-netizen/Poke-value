@@ -120,10 +120,10 @@ body{font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif}
         </div>
     </header>
     <main class="pv-main">
-        <div class="dev-notice">האתר בפיתוח: אפשר לחפש קלף ולראות את התמונה שלו, אך הצגת המחירים מושהית זמנית וההערכות טרם אומתו.</div>
+        <div class="dev-notice">האתר בפיתוח: אפשר לחפש קלף ולבקש נתוני שווי. כשאין מספיק נתונים מזוהים, לא מוצג מחיר.</div>
         <section class="intro-card">
             <h2>מה זה Poke Value?</h2>
-            <p>Poke Value הוא כלי בבנייה שמטרתו להעריך שווי של קלפי פוקימון מדורגים על בסיס מכירות שהסתיימו ב-eBay. הקלידו שם של קלף, בחרו את שפת הקלף ובחרו את הקלף המדויק מהתוצאות. כשהצגת המחירים תופעל, תוצג טבלת חברות דירוג וציונים; לחיצה על תא תטען שווי ממכירות שהסתיימו באותה חברה וציון. איך ההערכה אמורה להיחשב ומה עדיין לא אומת? <a href="how-it-works.html">קראו את ההסבר המלא</a>.</p>
+            <p>Poke Value הוא כלי בבנייה שמטרתו להעריך שווי של קלפי פוקימון מדורגים על בסיס מכירות שהסתיימו ב-eBay. הקלידו שם של קלף, בחרו את שפת הקלף ובחרו את הקלף המדויק מהתוצאות. תוצג טבלת חברות דירוג וציונים; לחיצה על תא תטען שווי ממכירות שהסתיימו באותה חברה וציון. איך ההערכה אמורה להיחשב ומה עדיין לא אומת? <a href="how-it-works.html">קראו את ההסבר המלא</a>.</p>
         </section>
         <div class="lang-row">
             <button data-lang="English" class="lang-btn active">English</button>
@@ -204,7 +204,7 @@ body{font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif}
         // notice is accurate and no server/provider calls can be triggered.
         // To reactivate intentionally: set SEARCH_ENABLED to true.
         // The server also requires SALES_PROVIDER_ENABLED=true.
-        const SEARCH_ENABLED = false;
+        const SEARCH_ENABLED = true;
 
         // Free, keyless card database (verified: no auth, CORS open, images are
         // raw card scans). https://tcgdex.dev
