@@ -35,10 +35,12 @@ const CACHE_TTL_MS = 14 * 24 * 60 * 60 * 1000;
 // Version-tagged cache key, separate namespace from the EAS estimate rows
 // ('s2:'). The grader is part of the key because the shared table's unique
 // constraint is (card_key, language, grade). Raw rows use grade 0.
-// c2: is a FRESH namespace (Main review Nov7 22:25): rows written before
+// c3: is a FRESH namespace (Nov8 canonical-query repair, Main-approved):
+// keys under c2 were built from the old TCGdex-id query format and must never
+// be read for canonical-format cells. (c2 itself was fresh per Main Nov7 22:25.)
 // variant separation could hold mixed-variant data, so none of them is ever
 // served again - not even for single-variant cards.
-const CACHE_KEY_PREFIX = 'c2:';
+const CACHE_KEY_PREFIX = 'c3:';
 
 function errMsg(err) {
   let m = err && err.message ? err.message : String(err);
@@ -161,7 +163,7 @@ export default async function handler(req, res) {
 
     let sales;
     try {
-      sales = await fetchSales(queryKey, graderKey, gradeValue, language, variantKey);
+      sales = await fetchSales(queryKey, graderKey, gradeValue, language, variantKey, variantInfo.printing);
     } catch (err) {
       // Message only: never log request URLs, they contain the API key.
       console.error('sales fetch failed for ' + graderKey + ' ' + gradeValue + ': ' + errMsg(err));
