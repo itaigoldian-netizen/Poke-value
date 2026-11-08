@@ -88,6 +88,8 @@ button.small{padding:8px 18px;font-size:.95rem;margin:14px 12px 0 0}
             <input id="source-name" type="text" placeholder="לדוגמה: PokéBeach">
             <label for="source-url">קישור למקור (לא חובה)</label>
             <input id="source-url" type="url" dir="ltr" placeholder="https://...">
+            <label for="image-url">קישור לתמונה ראשית (לא חובה)</label>
+            <input id="image-url" type="url" dir="ltr" placeholder="https://...">
             <button id="publish-btn">פרסום</button>
             <button id="logout-btn" class="link">התנתקות</button>
             <p id="pub-msg" class="msg"></p>
@@ -395,14 +397,17 @@ button.small{padding:8px 18px;font-size:.95rem;margin:14px 12px 0 0}
             var body = document.getElementById('body').value.trim();
             var srcName = document.getElementById('source-name').value.trim();
             var srcUrl = document.getElementById('source-url').value.trim();
+            var imgUrl = document.getElementById('image-url').value.trim();
             if (!title || !body){ msg('pub-msg', 'חובה למלא כותרת ותוכן.', false); return; }
             if (srcUrl && !/^https:\/\//i.test(srcUrl)){ msg('pub-msg', 'הקישור למקור חייב להתחיל ב-https://', false); return; }
+            if (imgUrl && !/^https:\/\//i.test(imgUrl)){ msg('pub-msg', 'הקישור לתמונה חייב להתחיל ב-https://', false); return; }
             msg('pub-msg', 'מפרסם...', true);
             sb.from('articles').insert({
                 title: title,
                 body: body,
                 source_name: srcName || null,
-                source_url: srcUrl || null
+                source_url: srcUrl || null,
+                image_url: imgUrl || null
             }).then(function(res){
                 if (res.error){ msg('pub-msg', 'הפרסום נכשל: ' + res.error.message, false); return; }
                 msg('pub-msg', 'הכתבה פורסמה! היא מופיעה עכשיו בעמוד החדשות.', true);
@@ -410,6 +415,7 @@ button.small{padding:8px 18px;font-size:.95rem;margin:14px 12px 0 0}
                 document.getElementById('body').value = '';
                 document.getElementById('source-name').value = '';
                 document.getElementById('source-url').value = '';
+                document.getElementById('image-url').value = '';
                 loadArticles();
             });
         });
