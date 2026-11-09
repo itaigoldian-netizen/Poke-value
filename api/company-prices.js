@@ -27,6 +27,12 @@ const RAW_CACHE_KEY_PREFIX = 'c5:';
 // c6 (Nov8 18:02, owner: special grades): foreign grade-10 rows. c4 normal-10
 // rows may mix positively labeled special grades and are never served.
 const TEN_CACHE_KEY_PREFIX = 'c6:'; // Nov9 owner decision: latest-three cached rows stay valid within the 14-day TTL
+// Nov9 review (Main): also read the briefly-live c7/c8/c9 generation (Nov9
+// 18:07-18:24) and serve the newest fresh calculation per cell; see
+// api/company-price.js. c7-gen rows have no unsafe RAW/grade-10 variants.
+const ALT_CACHE_KEY_PREFIX = 'c7:';
+const ALT_RAW_CACHE_KEY_PREFIX = 'c8:';
+const ALT_TEN_CACHE_KEY_PREFIX = 'c9:';
 // Synthetic grade codes for special cells (see api/company-price.js).
 const SPECIAL_CODE_LABEL = { 101: 'pristine', 102: 'black label' };
 const CACHE_TTL_MS = 14 * 24 * 60 * 60 * 1000;
@@ -81,6 +87,9 @@ export default async function handler(req, res) {
   const keyPrefix = CACHE_KEY_PREFIX + tag;
   const rawKeyPrefix = RAW_CACHE_KEY_PREFIX + tag;
   const tenKeyPrefix = TEN_CACHE_KEY_PREFIX + tag;
+  const altKeyPrefix = ALT_CACHE_KEY_PREFIX + tag;
+  const altRawKeyPrefix = ALT_RAW_CACHE_KEY_PREFIX + tag;
+  const altTenKeyPrefix = ALT_TEN_CACHE_KEY_PREFIX + tag;
 
   try {
     const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
@@ -89,7 +98,7 @@ export default async function handler(req, res) {
       .from('price_cache')
       .select('*')
       .eq('language', language)
-      .or(`card_key.like.${keyPrefix}%,card_key.like.${rawKeyPrefix}%,card_key.like.${tenKeyPrefix}%`);
+      .or(`card_key.like.${keyPrefix}%,card_key.like.${rawKeyPrefix}%,card_key.like.${tenKeyPrefix}%,card_key.like.${altKeyPrefix}%,card_key.like.${altRawKeyPrefix}%,card_key.like.${altTenKeyPrefix}%`);
 
     if (error) {
       console.error('cached prices read failed: ' + errMsg(error));
@@ -112,7 +121,8 @@ export default async function handler(req, res) {
       // 18:02) and may mix labeled specials: never serve it. Grade-10 cells
       // are served from c6 rows only.
       .filter(r => !(String(r.card_key).startsWith(CACHE_KEY_PREFIX) && Number(r.grade) === 10))
-      .filter(r => (now - new Date(r.updated_at).getTime()) < CACHE_TTL_MS)
+      // Fresh = within the TTL and not in the future (5 min skew tolerance).
+      .filter(r => { const age = now - new Date(r.updated_at).getTime(); return age > -5 * 60 * 1000 && age < CACHE_TTL_MS; })
       .map(r => ({
         grader: String(r.card_key).split('|')[1].toUpperCase(),
         grade: Number(r.grade) > 100 ? 10 : r.grade,
@@ -122,6 +132,15 @@ export default async function handler(req, res) {
         updated_at: r.updated_at,
         cached: true
       }));
+    // Dual-generation reads can surface both a c4/c5/c6 and a c7/c8/c9 row
+    // for the same cell: serve the newest actual calculation.
+    const byCell = new Map();
+    for (const c of cells) {
+      const id = c.grader + '|' + c.grade + '|' + (c.grade_label || '');
+      const prev = byCell.get(id);
+      if (!prev || new Date(c.updated_at).getTime() > new Date(prev.updated_at).getTime()) byCell.set(id, c);
+    }
+    const dedupedCells = [...byCell.values()];
 
     // EAS cells come live from approved community deal reports (owner
     // decision Nov7 17:36 + reports-in-valuation steering Nov7 14:06): no
@@ -131,13 +150,13 @@ export default async function handler(req, res) {
     if (communityError) {
       console.error('community sales read failed: ' + errMsg(communityError));
     } else {
-      cells.push(...communityCells);
+      dedupedCells.push(...communityCells);
     }
 
     return res.status(200).json({
       card_name: variantInfo.cardName,
       language,
-      cells
+      cells: dedupedCells
     });
 
   } catch (error) {
