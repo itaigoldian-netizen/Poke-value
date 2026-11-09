@@ -60,6 +60,9 @@ export default async function handler(req, res) {
   // Version-tagged cache key, namespaced per provider: rows written by one
   // provider are never served as the other's data. No schema change needed.
   const CACHE_KEY_PREFIX = 's2:'; // fresh namespace with c2: (Main review Nov7 22:25); legacy aggregate stays gated. Nov9 owner decision: s2 rows (latest-three means) stay valid within the 14-day TTL.
+  // Nov9 review (Main): also read the briefly-live s3: generation (Nov9
+  // 18:07-18:24) and serve the newest fresh calculation; writes stay on s2:.
+  const ALT_CACHE_KEY_PREFIX = 's3:';
   const queryKey = card.trim().toLowerCase().replace(/\s+/g, ' ');
   const cacheKey = CACHE_KEY_PREFIX + providerCacheTag() + ':' + queryKey;
 
@@ -67,13 +70,12 @@ export default async function handler(req, res) {
     const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 
     // Column names match the user's actual price_cache table.
-    const { data: cachedData, error: cacheReadError } = await supabase
+    const { data: cacheRows, error: cacheReadError } = await supabase
       .from('price_cache')
       .select('*')
-      .eq('card_key', cacheKey)
+      .in('card_key', [cacheKey, ALT_CACHE_KEY_PREFIX + cacheKey.slice(CACHE_KEY_PREFIX.length)])
       .eq('language', language)
-      .eq('grade', parsedGrade)
-      .single();
+      .eq('grade', parsedGrade);
 
     // PGRST116 = ordinary empty result (a legitimate cache miss). Anything else
     // (missing table/column, bad key, misconfiguration) must stop here, before
@@ -83,7 +85,16 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: 'Server is not configured' });
     }
 
-    if (cachedData && (Date.now() - new Date(cachedData.updated_at).getTime() < CACHE_TTL_MS)) {
+    // Newest fresh row across both generations; fresh = within the TTL and
+    // not in the future (5 min skew tolerance).
+    const nowTs = Date.now();
+    let cachedData = null;
+    for (const r of cacheRows || []) {
+      const age = nowTs - new Date(r.updated_at).getTime();
+      if (age <= -5 * 60 * 1000 || age >= CACHE_TTL_MS) continue;
+      if (!cachedData || new Date(r.updated_at).getTime() > new Date(cachedData.updated_at).getTime()) cachedData = r;
+    }
+    if (cachedData) {
       return res.status(200).json({
         query_key: cachedData.card_key,
         card_name: cachedData.card_query,
