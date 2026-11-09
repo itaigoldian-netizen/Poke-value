@@ -72,15 +72,16 @@ const CACHE_TTL_MS = 14 * 24 * 60 * 60 * 1000;
 // c5: (Nov8 17:51, owner: no medians anywhere) re-keys RAW rows only: c4 RAW
 // rows are medians and must never be served as means; c4 foreign-graded rows
 // were always means and stay valid, so their cache is kept.
-const CACHE_KEY_PREFIX = 'c7:';
-const RAW_CACHE_KEY_PREFIX = 'c8:';
+const CACHE_KEY_PREFIX = 'c4:';
+const RAW_CACHE_KEY_PREFIX = 'c5:';
 // c6: (Nov8 18:02, owner: special grades) re-keys foreign grade-10 rows: c4
 // normal-10 rows may mix positively labeled special grades (CGC pristine, BGS
 // black label). Grades 1-9 are unaffected and keep c4.
-// c7/c8/c9: (Nov9, owner: price = mean of ALL accepted sales in the returned
-// page) re-keys every row: c4/c5/c6 means were computed from the latest THREE
-// accepted sales and must never be served under the new rule.
-const TEN_CACHE_KEY_PREFIX = 'c9:';
+// Nov9 owner decision: rows cached under the previous latest-three rule STAY
+// VALID within the normal 14-day TTL (updated_at is the calculation time), so
+// the c4/c5/c6 namespaces are kept; only fresh computations use the new
+// all-accepted-sales mean.
+const TEN_CACHE_KEY_PREFIX = 'c6:';
 
 // Special-grade tokens (owner request Nov8 18:02): separate cells above a
 // regular 10, never mixed into normal-10 cells or the EAS formula. Stored as
