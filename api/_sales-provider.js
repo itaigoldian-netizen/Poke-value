@@ -17,7 +17,15 @@
 // The pause gate (SALES_PROVIDER_ENABLED) lives in the calling endpoints and
 // applies to every provider.
 
-const JUNK_KEYWORDS = /\b(lot|bundle|set of|proxy|custom|reprint|replica|orica|empty slab|slab only|fake)\b/i;
+// Sealed-product terms are junk for a single-card price everywhere (Nov9,
+// verified live): the provider's own 'sealed' flag is title-parsed and misses
+// unusual titles - a "$2,009 Pokémon Base Set 1996 Japanese Booster Pack
+// PSA 10" came through unflagged, and an English pack worded the same way
+// would pass every identity gate. A card title containing these words is
+// never the single graded card; false rejection only yields honest no-data,
+// while false acceptance poisons the cell. 'pack' alone is NOT junk
+// ('pack fresh' describes card condition), only product phrases are.
+const JUNK_KEYWORDS = /\b(lot|bundle|set of|proxy|custom|reprint|replica|orica|empty slab|slab only|fake|sealed|booster pack|booster box|booster bundle|blister|theme deck|trainer box|etb)\b/i;
 const LANG_PATTERNS = {
   Japanese: /\b(japanese|japan|jpn|jp)\b/i,
   Korean: /\b(korean|korea|kor)\b/i,
@@ -274,7 +282,12 @@ function escapeRegExp(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
 // because sets reuse collector numbers - Base Set 2 Charizard is also #4, so
 // '#4' + 'base set' tokens matched Base Set 2 sales into Base Set cells.
 const RE_TITLE_YEAR = /\b(19|20)\d{2}\b/;
-const RE_REPRINT_COLLECTION = /\b(celebrations|classic collection|anniversary|mcdonald'?s|trick or trade)\b/i;
+// Abbreviated markers (Nov9, verified live): sellers shorten Celebrations
+// Classic Collection to 'CELEB CLSC. COLL.' - word-bounded tokens that never
+// appear in a genuine vintage Base Set title ('celebrity'/'collection' do
+// not match 'celeb'/'clsc' word forms; bare 'collection'/'coll.' stay OUT
+// because sellers honestly write 'from my collection').
+const RE_REPRINT_COLLECTION = /\b(celebrations?|celeb\.?|clsc\.?|classic collection|anniversary|mcdonald'?s|trick or trade)\b/i;
 function slashNumberRegex(localId, official) {
   return new RegExp('\\b0*' + escapeRegExp(localId) + '\\s*/\\s*0*' + escapeRegExp(String(official)) + '(?!\\d)', 'i');
 }
@@ -303,6 +316,14 @@ export function titleMatchesPrinting(title, printing, language, cardFields) {
   if (printing.year) {
     const ym = t.match(RE_TITLE_YEAR);
     if (ym && Number(ym[0]) !== printing.year) return false;
+    // The provider's structured year is the same evidence parsed by the
+    // provider (docs: 'Year in the title'); a stated year that disagrees
+    // with the printing's release year rejects (2021 reprint in a 1999
+    // cell), a null year stays neutral like a yearless title.
+    if (cardFields && cardFields.year != null) {
+      const sy = Number(cardFields.year);
+      if (Number.isInteger(sy) && sy !== printing.year) return false;
+    }
   }
   // Reprint-collection contradiction, unless the card's own set IS that collection
   if (RE_REPRINT_COLLECTION.test(t)) {
@@ -626,6 +647,11 @@ async function fetchCompsApiSales(cardQuery, grader, grade, language, variantKey
     const c = item.card || {};
     const flags = Array.isArray(c.flags) ? c.flags : [];
     if (flags.some(f => COMPS_JUNK_FLAGS.has(f))) { rej.junk++; pushCand(item, 'junk'); continue; }
+    // Title-based junk backup (Nov9): provider flags are title-parsed hints
+    // and miss unusual titles, so the shared sealed/junk title gate runs
+    // locally too.
+    const title = String(item.title || '');
+    if (JUNK_KEYWORDS.test(title)) { rej.junk++; pushCand(item, 'junk-title'); continue; }
 
     if (language === 'English') {
       if (c.language && c.language !== 'en') { rej.language++; pushCand(item, 'language'); continue; }
@@ -646,7 +672,6 @@ async function fetchCompsApiSales(cardQuery, grader, grade, language, variantKey
       // too, so it runs just after the title is read below.
     }
 
-    const title = String(item.title || '');
     if (!isRaw && !acceptsGradedSale({ grader, grade, specialLabel, gradeLabel: c.grade_label, title })) { rej.gradeLabel++; pushCand(item, 'gradeLabel'); continue; }
     const vReason = variantRejectReason(title, variantKey, c);
     if (vReason) {
@@ -688,4 +713,4 @@ async function fetchCompsApiSales(cardQuery, grader, grade, language, variantKey
   // through the sales count; printings are never mixed to reach three.
   listings.sort((a, b) => new Date(b.date) - new Date(a.date));
   return listings.slice(0, 3);
-                             }
+}
