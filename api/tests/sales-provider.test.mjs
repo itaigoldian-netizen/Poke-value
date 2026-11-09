@@ -200,6 +200,26 @@ test('fetchSales CompsAPI query: slash number and finish words stay out of q, wh
   }
 });
 
+test('fetchSales CompsAPI: every accepted sale is returned, no latest-three cap (Nov9 owner rule)', async () => {
+  process.env.SALES_PROVIDER = 'compsapi';
+  process.env.COMPS_API_KEY = 'test-key';
+  const realFetch = globalThis.fetch;
+  const mk = (price, day) => ({ price, title: '1999 Pokemon Charizard Base Set 4/102 Unlimited Holo PSA 10', last_sold: '2026-10-0' + day + 'T00:00:00Z',
+    card: { graded: true, grader: 'PSA', grade: '10', grade_label: null, card_number: '4/102', year: 1999, language: 'en', first_edition: false, flags: [] } });
+  globalThis.fetch = async () => ({ ok: true, status: 200, json: async () => ({ items: [
+    mk(100, 1), mk(200, 2), mk(300, 3), mk(400, 4), mk(500, 5),
+  ] }) });
+  try {
+    const sales = await fetchSales('Charizard Base Set 4/102', 'PSA', 10, 'English', 'unlimited+holo', BASE1, null);
+    assert.equal(sales.length, 5); // all five accepted sales feed the mean
+    assert.deepEqual(sales.map(x => x.price), [500, 400, 300, 200, 100]); // still date-sorted newest first
+  } finally {
+    globalThis.fetch = realFetch;
+    delete process.env.SALES_PROVIDER;
+    delete process.env.COMPS_API_KEY;
+  }
+});
+
 test('fetchSales CompsAPI: unfiltered pool is judged by the local identity gates (Nov9)', async () => {
   // With no provider-side options the page now holds every q-match; items the
   // old options used to drop must be rejected by the LOCAL gates instead.
