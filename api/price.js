@@ -1,3 +1,4 @@
+import { newestValidCacheRow } from './_price-cache.js';
 import { createClient } from '@supabase/supabase-js';
 import { fetchSales, providerKeyConfigured, providerCacheTag } from './_sales-provider.js';
 
@@ -85,15 +86,9 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: 'Server is not configured' });
     }
 
-    // Newest fresh row across both generations; fresh = within the TTL and
-    // not in the future (5 min skew tolerance).
-    const nowTs = Date.now();
-    let cachedData = null;
-    for (const r of cacheRows || []) {
-      const age = nowTs - new Date(r.updated_at).getTime();
-      if (age <= -5 * 60 * 1000 || age >= CACHE_TTL_MS) continue;
-      if (!cachedData || new Date(r.updated_at).getTime() > new Date(cachedData.updated_at).getTime()) cachedData = r;
-    }
+    // Legacy aggregate keys do not encode canonical printing/variant
+    // identity. Do not reuse those rows as exact-cell evidence.
+    const cachedData = newestValidCacheRow(cacheRows, { now: Date.now(), keys: [cacheKey, ALT_CACHE_KEY_PREFIX + cacheKey.slice(CACHE_KEY_PREFIX.length)], language, grade: parsedGrade, aggregate: true });
     if (cachedData) {
       return res.status(200).json({
         query_key: cachedData.card_key,
