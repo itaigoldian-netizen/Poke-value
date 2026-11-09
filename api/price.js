@@ -59,7 +59,7 @@ export default async function handler(req, res) {
 
   // Version-tagged cache key, namespaced per provider: rows written by one
   // provider are never served as the other's data. No schema change needed.
-  const CACHE_KEY_PREFIX = 's2:'; // fresh namespace with c2: (Main review Nov7 22:25); legacy aggregate stays gated
+  const CACHE_KEY_PREFIX = 's3:'; // s2: rows blended latest-three means; re-keyed Nov9 (owner: all accepted sales); legacy aggregate stays gated
   const queryKey = card.trim().toLowerCase().replace(/\s+/g, ' ');
   const cacheKey = CACHE_KEY_PREFIX + providerCacheTag() + ':' + queryKey;
 
