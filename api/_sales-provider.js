@@ -149,32 +149,36 @@ function variantQueryTerms(variantKey) {
 // only: it can confirm 1st edition, and a structured first_edition===true
 // contradicts every non-1st-edition variant. It never overrides an explicit
 // title contradiction.
-export function titleMatchesVariant(title, variantKey, cardFields) {
-  if (!variantKey) return true; // legacy aggregate path carries no variant
+export function variantRejectReason(title, variantKey, cardFields) {
+  if (!variantKey) return null; // legacy aggregate path carries no variant
   const tokens = variantKey.split('+');
   const edition = tokens.find(t => t === 'first-edition' || t === 'unlimited' || t === 'shadowless') || null;
   const finish = tokens.find(t => t !== 'first-edition' && t !== 'unlimited' && t !== 'shadowless') || null;
   const structFirstEd = !!(cardFields && cardFields.first_edition === true);
   if (edition === 'first-edition') {
-    if (!RE_1ST_ED.test(title) && !structFirstEd) return false;
-    if (RE_UNLIMITED.test(title)) return false;
+    if (!RE_1ST_ED.test(title) && !structFirstEd) return 'variant:first-ed-evidence-missing';
+    if (RE_UNLIMITED.test(title)) return 'variant:unlimited-word';
   } else {
-    if (RE_1ST_ED.test(title) || structFirstEd) return false;
+    if (RE_1ST_ED.test(title) || structFirstEd) return 'variant:first-ed-title';
   }
-  if (edition === 'unlimited' && !RE_UNLIMITED.test(title)) return false;
-  if (!edition && RE_UNLIMITED.test(title)) return false;
+  if (edition === 'unlimited' && !RE_UNLIMITED.test(title)) return 'variant:edition-absent';
+  if (!edition && RE_UNLIMITED.test(title)) return 'variant:unlimited-word';
   if (edition === 'shadowless') {
-    if (!RE_SHADOWLESS.test(title)) return false;
+    if (!RE_SHADOWLESS.test(title)) return 'variant:edition-absent';
   } else if (edition !== 'first-edition' && RE_SHADOWLESS.test(title)) {
     // Base Set 1st edition IS shadowless, so a 1st-edition variant tolerates
     // the word; every other variant rejects it.
-    return false;
+    return 'variant:shadowless-title';
   }
-  if (finish === 'holo' && !(RE_HOLO.test(title) && !RE_REVERSE.test(title) && !RE_NONHOLO.test(title))) return false;
-  if (finish === 'non-holo' && !(RE_NONHOLO.test(title) && !RE_REVERSE.test(title))) return false;
-  if (finish === 'reverse' && !(RE_REVERSE.test(title) && RE_HOLO.test(title) && !RE_NONHOLO.test(title))) return false;
-  if (finish === 'w-promo' && !(RE_WPROMO.test(title) && !RE_REVERSE.test(title) && !RE_NONHOLO.test(title))) return false;
-  return true;
+  if (finish === 'holo' && !(RE_HOLO.test(title) && !RE_REVERSE.test(title) && !RE_NONHOLO.test(title))) return 'variant:finish';
+  if (finish === 'non-holo' && !(RE_NONHOLO.test(title) && !RE_REVERSE.test(title))) return 'variant:finish';
+  if (finish === 'reverse' && !(RE_REVERSE.test(title) && RE_HOLO.test(title) && !RE_NONHOLO.test(title))) return 'variant:finish';
+  if (finish === 'w-promo' && !(RE_WPROMO.test(title) && !RE_REVERSE.test(title) && !RE_NONHOLO.test(title))) return 'variant:finish';
+  return null;
+}
+
+export function titleMatchesVariant(title, variantKey, cardFields) {
+  return variantRejectReason(title, variantKey, cardFields) === null;
 }
 
 // --- Canonical query identity (repair Nov8, Main-approved direction) ---
@@ -438,9 +442,9 @@ export function titleMatchesSpecialGrade(title, grader, grade, specialLabel) {
   return !(Number(grade) === 10 && ev !== null);
 }
 
-export async function fetchSales(cardQuery, grader, grade, language, variantKey, printing, specialLabel) {
+export async function fetchSales(cardQuery, grader, grade, language, variantKey, printing, specialLabel, diag) {
   if (activeProvider() === 'compsapi') {
-    return fetchCompsApiSales(cardQuery, grader, grade, language, variantKey, printing, specialLabel);
+    return fetchCompsApiSales(cardQuery, grader, grade, language, variantKey, printing, specialLabel, diag);
   }
   return fetchScraperApiSales(cardQuery, grader, grade, language, variantKey, printing, specialLabel);
 }
@@ -525,7 +529,7 @@ const COMPS_LANG = { English: 'en', Japanese: 'ja', Chinese: 'zh', Korean: 'ko' 
 // and we drop them again locally so a flag definition change never leaks one in.
 const COMPS_JUNK_FLAGS = new Set(['lot', 'mystery', 'sealed', 'accessory', 'replica', 'keyword_stuffing', 'not_graded_claim', 'title_missing']);
 
-async function fetchCompsApiSales(cardQuery, grader, grade, language, variantKey, printing, specialLabel) {
+async function fetchCompsApiSales(cardQuery, grader, grade, language, variantKey, printing, specialLabel, diag) {
   const key = process.env.COMPS_API_KEY;
   if (!key) {
     throw new Error('data provider is not configured');
@@ -598,24 +602,43 @@ async function fetchCompsApiSales(cardQuery, grader, grade, language, variantKey
   // rejected everything" in the logs. Counts and the provider's own hint
   // only - never URLs, keys or sale titles.
   const rej = { price: 0, junk: 0, language: 0, rawGraded: 0, grader: 0, grade: 0, gradeLabel: 0, variant: 0, printing: 0, date: 0 };
+  const rejVariant = {}; // variant rejections split by exact reason
+  // diag: optional caller-provided object filled with a bounded snapshot of
+  // the response - per-candidate title/price/date/url/parsed card fields and
+  // the exact gate that rejected it - so an empty result stays inspectable
+  // later without a quota-costing refetch. Bounded: first 12 rejected
+  // candidates, titles <=160 chars, no request URLs or keys.
+  const pushCand = (item, reason) => {
+    if (!diag) return;
+    const list = diag.candidates || (diag.candidates = []);
+    if (list.length >= 12) return;
+    list.push({
+      title: String(item.title || '').slice(0, 160),
+      price: typeof item.price === 'number' ? item.price : null,
+      last_sold: item.last_sold || null,
+      url: item.url || null,
+      card: item.card || null,
+      reason,
+    });
+  };
   for (const item of body.items) {
-    if (typeof item.price !== 'number' || item.price <= 0) { rej.price++; continue; }
+    if (typeof item.price !== 'number' || item.price <= 0) { rej.price++; pushCand(item, 'price'); continue; }
     const c = item.card || {};
     const flags = Array.isArray(c.flags) ? c.flags : [];
-    if (flags.some(f => COMPS_JUNK_FLAGS.has(f))) { rej.junk++; continue; }
+    if (flags.some(f => COMPS_JUNK_FLAGS.has(f))) { rej.junk++; pushCand(item, 'junk'); continue; }
 
     if (language === 'English') {
-      if (c.language && c.language !== 'en') { rej.language++; continue; }
+      if (c.language && c.language !== 'en') { rej.language++; pushCand(item, 'language'); continue; }
     } else if (c.language !== COMPS_LANG[language]) {
-      rej.language++; continue;
+      rej.language++; pushCand(item, 'language'); continue;
     }
 
     if (isRaw) {
       // Raw = the title names no grading company with a grade.
-      if (c.graded === true) { rej.rawGraded++; continue; }
+      if (c.graded === true) { rej.rawGraded++; pushCand(item, 'rawGraded'); continue; }
     } else {
-      if (String(c.grader || '').toUpperCase() !== grader) { rej.grader++; continue; }
-      if (String(c.grade || '') !== String(grade)) { rej.grade++; continue; }
+      if (String(c.grader || '').toUpperCase() !== grader) { rej.grader++; pushCand(item, 'grader'); continue; }
+      if (String(c.grade || '') !== String(grade)) { rej.grade++; pushCand(item, 'grade'); continue; }
       // Structured grade_label (docs: "gem mint, pristine, black label, mint
       // or near mint", null when unstated) is the only evidence separating a
       // special grade from a regular 10.
@@ -624,27 +647,40 @@ async function fetchCompsApiSales(cardQuery, grader, grade, language, variantKey
     }
 
     const title = String(item.title || '');
-    if (!isRaw && !acceptsGradedSale({ grader, grade, specialLabel, gradeLabel: c.grade_label, title })) { rej.gradeLabel++; continue; }
-    if (!titleMatchesVariant(title, variantKey, c)) { rej.variant++; continue; }
+    if (!isRaw && !acceptsGradedSale({ grader, grade, specialLabel, gradeLabel: c.grade_label, title })) { rej.gradeLabel++; pushCand(item, 'gradeLabel'); continue; }
+    const vReason = variantRejectReason(title, variantKey, c);
+    if (vReason) {
+      rej.variant++;
+      rejVariant[vReason] = (rejVariant[vReason] || 0) + 1;
+      pushCand(item, vReason);
+      continue;
+    }
     // Printing identity evidence (Nov8): required for every counted sale; the
     // provider's structured card_number is accepted as slash-number evidence.
-    if (printing && !titleMatchesPrinting(title, printing, language, c)) { rej.printing++; continue; }
+    if (printing && !titleMatchesPrinting(title, printing, language, c)) { rej.printing++; pushCand(item, 'printing'); continue; }
     // Owner rule: the price is computed from the latest THREE accepted sales.
     // A sale without a verifiable date cannot prove recency, so it never
     // enters the cell.
     const date = item.last_sold ? new Date(item.last_sold) : null;
-    if (!date || isNaN(date.getTime())) { rej.date++; continue; }
+    if (!date || isNaN(date.getTime())) { rej.date++; pushCand(item, 'date'); continue; }
 
     listings.push({ price: item.price, date: item.last_sold, title });
   }
 
+  if (diag) {
+    diag.provider_count = typeof body.count === 'number' ? body.count : body.items.length;
+    diag.before_filters = typeof body.count_before_filters === 'number' ? body.count_before_filters : null;
+    diag.hint = body.hint ? String(body.hint) : null;
+    diag.rejections = { ...rej, variant_reasons: rejVariant };
+  }
   if (listings.length === 0) {
     console.error('sales diagnostics for ' + grader + ' ' + grade + (specialLabel ? ' ' + specialLabel : '') + ' "' + cardQuery + '"'
       + ': candidates=' + body.items.length
       + (typeof body.count === 'number' ? ' provider_count=' + body.count : '')
       + (typeof body.count_before_filters === 'number' ? ' before_filters=' + body.count_before_filters : '')
       + (body.hint ? ' hint=' + JSON.stringify(String(body.hint)) : '')
-      + ' rejections=' + JSON.stringify(rej));
+      + ' rejections=' + JSON.stringify(rej)
+      + ' variant_reasons=' + JSON.stringify(rejVariant));
   }
 
   // Never trust the provider's order: sort by the sale date itself, newest
@@ -652,4 +688,4 @@ async function fetchCompsApiSales(cardQuery, grader, grade, language, variantKey
   // through the sales count; printings are never mixed to reach three.
   listings.sort((a, b) => new Date(b.date) - new Date(a.date));
   return listings.slice(0, 3);
-}
+                             }
