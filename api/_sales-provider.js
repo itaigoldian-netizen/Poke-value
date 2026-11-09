@@ -533,10 +533,11 @@ async function fetchScraperApiSales(cardQuery, grader, grade, language, variantK
     }
   }
 
-  // Owner rule: a cell price comes from the latest THREE accepted sales, not
-  // ten. This dormant fallback has no sale dates, so it takes the provider's
-  // own newest-first order and honestly reports the count used.
-  return listings.slice(0, 3);
+  // Owner rule (Nov9): a cell price is the arithmetic mean of EVERY accepted
+  // sale in the returned page, not a capped sample. This dormant fallback has
+  // no sale dates, so it keeps the provider's own newest-first order and
+  // honestly reports the count used.
+  return listings;
 }
 
 // --- CompsAPI (https://api.compsapi.com, docs: compsapi.com/docs) ---
@@ -677,7 +678,6 @@ async function fetchCompsApiSales(cardQuery, grader, grade, language, variantKey
     // Printing identity evidence (Nov8): required for every counted sale; the
     // provider's structured card_number is accepted as slash-number evidence.
     if (printing && !titleMatchesPrinting(title, printing, language, c)) { rej.printing++; pushCand(item, 'printing'); continue; }
-    // Owner rule: the price is computed from the latest THREE accepted sales.
     // A sale without a verifiable date cannot prove recency, so it never
     // enters the cell.
     const date = item.last_sold ? new Date(item.last_sold) : null;
@@ -702,9 +702,10 @@ async function fetchCompsApiSales(cardQuery, grader, grade, language, variantKey
       + ' variant_reasons=' + JSON.stringify(rejVariant));
   }
 
-  // Never trust the provider's order: sort by the sale date itself, newest
-  // first, and keep the latest three. Fewer than three is reported honestly
-  // through the sales count; printings are never mixed to reach three.
+  // Owner rule (Nov9): the price is the arithmetic mean of EVERY accepted
+  // sale in the returned page (up to 240 candidates), never a capped sample
+  // and never a mix of printings to reach a quota. Sorted by the sale date
+  // itself, newest first; the reported sales count is the full count used.
   listings.sort((a, b) => new Date(b.date) - new Date(a.date));
-  return listings.slice(0, 3);
+  return listings;
                              }
