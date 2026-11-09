@@ -560,8 +560,7 @@ async function fetchCompsApiSales(cardQuery, grader, grade, language, variantKey
   // strict local filters below judge up to 240 candidates instead of the 10
   // newest items /v1/comps exposes. That is the Nov8 repair for cells whose
   // 10-item slice happened to contain no title with positive printing
-  // evidence. Grader+grade are passed as card options, not spelled into q,
-  // per the docs.
+  // evidence.
   // Recall repair (Nov9): the provider's search is a literal AND over title
   // words (docs: "Every word has to appear in the listing title"), so q must
   // not repeat evidence the local gates below verify more precisely. Keep
@@ -574,24 +573,22 @@ async function fetchCompsApiSales(cardQuery, grader, grade, language, variantKey
     ? cardQuery.replace(printing.numberSlash, '').replace(/\s+/g, ' ').trim()
     : cardQuery;
   const qTerms = qBase;
-  const params = new URLSearchParams({ q: qTerms, exclude: 'junk', size: '240' });
-  if (isRaw) {
-    params.set('graded', 'false');
-  } else {
-    params.set('grader', grader);
-    params.set('grade', String(grade));
-  }
-  // Edition evidence the provider parses itself: 1st-edition variants ask for
-  // the first_edition option (docs: "1st edition cards only (or false for
-  // none)"), and every other variant excludes detected 1st-edition sales.
-  // Local checks below still verify; the option only narrows the pool.
-  if (variantKey) {
-    params.set('first_edition', variantKey.split('+').includes('first-edition') ? 'true' : 'false');
-  }
-  // English is NOT filtered server-side: the lang option drops every title
-  // that names no language, which is most English sales. For English we pass
-  // no lang and drop the few foreign-tagged rows locally instead.
-  if (language !== 'English') params.set('lang', COMPS_LANG[language]);
+  // Full-pool judging (Nov9, owner request): the provider's card options
+  // filter the page BEFORE it reaches us (docs: "they filter the page you
+  // asked for; count_before_filters shows how many there were before") - a
+  // graded cell's 239-title pool shrank to 2-3 items that way. The local
+  // gates below re-verify every one of those dimensions with equal or
+  // stricter rules (grader, grade, grade_label, variant incl. edition
+  // evidence, language, junk flags + junk titles, printing, date), so the
+  // request now takes the whole q-matched page instead: cards=1 attaches the
+  // card object without filtering, exclude=none overrides the default
+  // junk-flag exclusion, and no grader/grade/graded/first_edition/lang
+  // options are sent. Accepted sales can only grow where a provider-side
+  // filter was stricter than the local gates; every safety gate below is
+  // unchanged. Trade-off: for cards whose q-match exceeds the 240-item page,
+  // the newest-first page can now hold other graders/grades too, so the
+  // judged pool is not guaranteed complete for the hottest cards.
+  const params = new URLSearchParams({ q: qTerms, size: '240', cards: '1', exclude: 'none' });
 
   const endpoint = 'https://api.compsapi.com/v1/sold?' + params.toString();
   const response = await fetch(endpoint, { headers: { 'X-API-Key': key } });
