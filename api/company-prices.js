@@ -1,3 +1,4 @@
+import { companyCacheKeys, newestValidCacheRow } from './_price-cache.js';
 import { createClient } from '@supabase/supabase-js';
 import { providerCacheTag, resolveCardVariant } from './_sales-provider.js';
 import { fetchEasCommunityCells } from './_community-sales.js';
@@ -106,41 +107,25 @@ export default async function handler(req, res) {
     }
 
     const now = Date.now();
-    const cells = (rows || [])
-      // EAS never comes from the external provider (owner decision Nov7
-      // 17:36): its recorded sales are this site's own deal reports, so any
-      // cached EAS row is excluded here rather than displayed as a company price.
-      .filter(r => !String(r.card_key).toLowerCase().endsWith('|eas'))
-      // Every c2: row is variant-scoped: only cells stored for THIS resolved
-      // variant auto-display, for single-variant printings too.
-      .filter(r => String(r.card_key).endsWith('|v:' + variantKey))
-      // A c4 RAW row predates the no-medians rule (Nov8 17:51) and is a
-      // median: never serve it. RAW cells are served from c5 rows only.
-      .filter(r => !(String(r.card_key).startsWith(CACHE_KEY_PREFIX) && String(r.card_key).toLowerCase().includes('|raw|')))
-      // A c4 foreign grade-10 row predates the special-grade split (Nov8
-      // 18:02) and may mix labeled specials: never serve it. Grade-10 cells
-      // are served from c6 rows only.
-      .filter(r => !(String(r.card_key).startsWith(CACHE_KEY_PREFIX) && Number(r.grade) === 10))
-      // Fresh = within the TTL and not in the future (5 min skew tolerance).
-      .filter(r => { const age = now - new Date(r.updated_at).getTime(); return age > -5 * 60 * 1000 && age < CACHE_TTL_MS; })
-      .map(r => ({
-        grader: String(r.card_key).split('|')[1].toUpperCase(),
-        grade: Number(r.grade) > 100 ? 10 : r.grade,
-        grade_label: SPECIAL_CODE_LABEL[r.grade] || undefined,
-        price: r.price,
-        total_sales: r.sample_count,
-        updated_at: r.updated_at,
-        cached: true
-      }));
-    // Dual-generation reads can surface both a c4/c5/c6 and a c7/c8/c9 row
-    // for the same cell: serve the newest actual calculation.
-    const byCell = new Map();
-    for (const c of cells) {
-      const id = c.grader + '|' + c.grade + '|' + (c.grade_label || '');
-      const prev = byCell.get(id);
-      if (!prev || new Date(c.updated_at).getTime() > new Date(prev.updated_at).getTime()) byCell.set(id, c);
+    // Group only syntactically exact company/variant keys, then choose the
+    // newest VALID row. A bad newer row must not mask an older safe mean.
+    const groups = new Map();
+    for (const row of rows || []) {
+      const match = String(row.card_key).match(/\|(psa|bgs|cgc|sgc|tag|raw)\|v:/);
+      if (!match) continue;
+      const grader = match[1].toUpperCase();
+      const grade = Number(row.grade);
+      const id = grader + '|' + grade;
+      if (!groups.has(id)) groups.set(id, { grader, grade, rows: [] });
+      groups.get(id).rows.push(row);
     }
-    const dedupedCells = [...byCell.values()];
+    const dedupedCells = [];
+    for (const group of groups.values()) {
+      const { grader, grade } = group;
+      const provider = providerCacheTag();
+      const row = newestValidCacheRow(group.rows, { now, query: queryKey, grader, variant: variantKey, grade, language, provider, keys: companyCacheKeys(queryKey, grader, variantKey, grade, provider) });
+      if (row) dedupedCells.push({ grader, grade: grade > 100 ? 10 : grade, grade_label: SPECIAL_CODE_LABEL[grade] || undefined, price: row.price, total_sales: row.sample_count, updated_at: row.updated_at, cached: true });
+    }
 
     // EAS cells come live from approved community deal reports (owner
     // decision Nov7 17:36 + reports-in-valuation steering Nov7 14:06): no
