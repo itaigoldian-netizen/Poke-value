@@ -1,3 +1,4 @@
+import { companyCacheKeys, newestValidCacheRow, cacheMetadata } from './_price-cache.js';
 import { createClient } from '@supabase/supabase-js';
 import { fetchSales, providerKeyConfigured, providerCacheTag, resolveCardVariant } from './_sales-provider.js';
 import { fetchEasCommunityCells } from './_community-sales.js';
@@ -82,34 +83,6 @@ const RAW_CACHE_KEY_PREFIX = 'c5:';
 // the c4/c5/c6 namespaces are kept; only fresh computations use the new
 // all-accepted-sales mean.
 const TEN_CACHE_KEY_PREFIX = 'c6:';
-// Nov9 review (Main): the c7/c8/c9 namespace was live briefly (Nov9
-// 18:07-18:24) before that decision. Both generations hold compatible
-// arithmetic means under identical identity/variant keying (c4/c5/c6 from
-// Nov8 16:17+ are means, variant-scoped, special-grade split; c3 medians and
-// c2 keys remain unread), so reads check BOTH generations and serve the
-// newest fresh calculation; writes always use the current prefixes above.
-const ALT_CACHE_KEY_PREFIX = { 'c4:': 'c7:', 'c5:': 'c8:', 'c6:': 'c9:' };
-function altCacheKey(key) {
-  for (const pfx of Object.keys(ALT_CACHE_KEY_PREFIX)) {
-    if (key.startsWith(pfx)) return ALT_CACHE_KEY_PREFIX[pfx] + key.slice(pfx.length);
-  }
-  return null;
-}
-// Fresh = calculated within the TTL and not in the future (5 min skew
-// tolerance; a bad future timestamp is never served as fresh).
-function cacheFresh(updatedAt, now) {
-  const age = now - new Date(updatedAt).getTime();
-  return age > -5 * 60 * 1000 && age < CACHE_TTL_MS;
-}
-function freshestCacheRow(rows, now) {
-  let best = null;
-  for (const r of rows || []) {
-    if (!cacheFresh(r.updated_at, now)) continue;
-    if (!best || new Date(r.updated_at).getTime() > new Date(best.updated_at).getTime()) best = r;
-  }
-  return best;
-}
-
 // Special-grade tokens (owner request Nov8 18:02): separate cells above a
 // regular 10, never mixed into normal-10 cells or the EAS formula. Stored as
 // synthetic grade codes so cache rows stay separate under the table's
@@ -130,9 +103,11 @@ function errMsg(err) {
 // The resolved variant is ALWAYS part of the key (Main review Nov7 22:25):
 // every lookup is variant-scoped, even for single-variant printings.
 function cacheKeyFor(queryKey, grader, variantKey, gradeValue) {
-  const prefix = grader === 'RAW' ? RAW_CACHE_KEY_PREFIX
-    : (gradeValue === 10 || gradeValue > 100 ? TEN_CACHE_KEY_PREFIX : CACHE_KEY_PREFIX);
-  return prefix + providerCacheTag() + ':' + queryKey + '|' + grader.toLowerCase() + '|v:' + variantKey;
+  return companyCacheKeys(queryKey, grader, variantKey, gradeValue, providerCacheTag())[0];
+}
+function cacheScope(query, grader, variant, grade, language, now = Date.now()) {
+  const provider = providerCacheTag();
+  return { query, grader, variant, grade, language, provider, now, keys: companyCacheKeys(query, grader, variant, grade, provider) };
 }
 
 export default async function handler(req, res) {
@@ -249,10 +224,10 @@ export default async function handler(req, res) {
           const { data: cacheRows } = await supabase
             .from('price_cache')
             .select('*')
-            .in('card_key', [fKey, altCacheKey(fKey)].filter(Boolean))
+            .in('card_key', companyCacheKeys(queryKey, fg, variantKey, gradeValue, providerCacheTag()))
             .eq('language', language)
             .eq('grade', gradeValue);
-          const row = freshestCacheRow(cacheRows, Date.now());
+          const row = newestValidCacheRow(cacheRows, cacheScope(queryKey, fg, variantKey, gradeValue, language));
           if (row) {
             mean = Number(row.price);
             samples = Number(row.sample_count) || 0;
@@ -279,7 +254,7 @@ export default async function handler(req, res) {
                     grade: gradeValue,
                     price: mean,
                     sample_count: samples,
-                    breakdown: {},
+                    breakdown: cacheMetadata(queryKey, fg, variantKey, gradeValue, providerCacheTag()),
                     updated_at: new Date().toISOString()
                   }, { onConflict: 'card_key,language,grade' });
                 if (fCacheError) console.error('cache write failed: ' + errMsg(fCacheError));
@@ -342,7 +317,7 @@ export default async function handler(req, res) {
     const { data: cacheRows, error: cacheReadError } = await supabase
       .from('price_cache')
       .select('*')
-      .in('card_key', [cacheKey, altCacheKey(cacheKey)].filter(Boolean))
+      .in('card_key', companyCacheKeys(queryKey, graderKey, variantKey, gradeValue, providerCacheTag()))
       .eq('language', language)
       .eq('grade', gradeValue);
 
@@ -354,7 +329,7 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: 'Server is not configured' });
     }
 
-    const cachedData = freshestCacheRow(cacheRows, Date.now());
+    const cachedData = newestValidCacheRow(cacheRows, cacheScope(queryKey, graderKey, variantKey, gradeValue, language));
     if (cachedData) {
       return res.status(200).json({
         card_name: cachedData.card_query,
@@ -414,7 +389,7 @@ export default async function handler(req, res) {
       grade: gradeValue,
       price: finalPrice,
       sample_count: sales.length,
-      breakdown: {},
+      breakdown: cacheMetadata(queryKey, graderKey, variantKey, gradeValue, providerCacheTag()),
       updated_at: payload.updated_at
     };
 
