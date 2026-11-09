@@ -194,3 +194,43 @@ test('fetchSales CompsAPI query: slash number and finish words stay out of q (re
   }
 });
 
+// --- Poison-gap repair (Nov9, verified live against check #2 candidates) ---
+
+test('printing: reprint-collection abbreviations reject (CELEB CLSC. COLL.)', () => {
+  // The exact live candidate wording, minus its 2021 year: abbreviated
+  // Celebrations Classic Collection markers alone must reject.
+  assert.equal(titleMatchesPrinting('CHARIZARD HOLO POKEMON CELEB CLSC. COLL. BASE SET HOLOFOIL EN 4/102 PSA 10', BASE1, 'English'), false);
+  // ...and with the year (year gate already rejected it; both gates now hold).
+  assert.equal(titleMatchesPrinting('CHARIZARD HOLO POKEMON CELEB CLSC. COLL. BASE SET HOLOFOIL EN 2021 4/102 PSA 10', BASE1, 'English'), false);
+  // 'celebrity' and honest 'from my collection' do NOT trip the markers.
+  assert.equal(titleMatchesPrinting('1999 Pokemon Charizard Base Set 4/102 PSA 10 from my collection', BASE1, 'English'), true);
+});
+
+test('printing: structured year disagreement rejects even without a title year', () => {
+  assert.equal(titleMatchesPrinting('Pokemon Charizard Base Set 4/102 PSA 10', BASE1, 'English', { ...CGC10, year: 2021 }), false);
+  assert.equal(titleMatchesPrinting('Pokemon Charizard Base Set 4/102 PSA 10', BASE1, 'English', { ...CGC10, year: 1999 }), true);
+  assert.equal(titleMatchesPrinting('Pokemon Charizard Base Set 4/102 PSA 10', BASE1, 'English', { ...CGC10, year: null }), true); // null stays neutral
+});
+
+test('fetchSales CompsAPI: sealed-product title is junk even when the provider missed the flag', async () => {
+  process.env.SALES_PROVIDER = 'compsapi';
+  process.env.COMPS_API_KEY = 'test-key';
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async () => ({ ok: true, status: 200, json: async () => ({ items: [
+    // English-worded sibling of the live "$2,009 Japanese Booster Pack PSA 10"
+    // candidate: unflagged by the provider, caught by the local title gate.
+    { price: 2009.62, title: 'Pokemon Base Set Unlimited Booster Pack PSA 10', last_sold: '2026-11-01T00:00:00Z',
+      card: { graded: true, grader: 'PSA', grade: '10', grade_label: null, card_number: '4/102', year: 1999, language: 'en', first_edition: false, flags: [] } },
+    { price: 500, title: '1999 Pokemon Charizard Base Set 4/102 Unlimited Holo PSA 10', last_sold: '2026-11-02T00:00:00Z',
+      card: { graded: true, grader: 'PSA', grade: '10', grade_label: null, card_number: '4/102', year: 1999, language: 'en', first_edition: false, flags: [] } },
+  ] }) });
+  try {
+    const sales = await fetchSales('Charizard Base Set 4/102', 'PSA', 10, 'English', 'unlimited+holo', BASE1, null);
+    assert.equal(sales.length, 1);
+    assert.equal(sales[0].price, 500);
+  } finally {
+    globalThis.fetch = realFetch;
+    delete process.env.SALES_PROVIDER;
+    delete process.env.COMPS_API_KEY;
+  }
+});
