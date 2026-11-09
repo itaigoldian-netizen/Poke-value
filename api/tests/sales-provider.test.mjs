@@ -167,7 +167,7 @@ test('fetchSales graded branch: structured grade_label reaches the accept decisi
 // words are verified by the more precise local gates instead. Asserts the
 // outgoing query shape and that a zero-padded-number, "holographic"-worded
 // sale passes the unchanged local identity gates end to end.
-test('fetchSales CompsAPI query: slash number and finish words stay out of q (recall repair Nov9)', async () => {
+test('fetchSales CompsAPI query: slash number and finish words stay out of q, whole page judged locally (recall repair Nov9 x2)', async () => {
   process.env.SALES_PROVIDER = 'compsapi';
   process.env.COMPS_API_KEY = 'test-key';
   const realFetch = globalThis.fetch;
@@ -184,9 +184,44 @@ test('fetchSales CompsAPI query: slash number and finish words stay out of q (re
     assert.equal(q.includes('4/102'), false);   // number left to the local zero-pad-tolerant gate
     assert.equal(q.includes('holo'), false);    // finish left to the local finish regex
     assert.ok(q.includes('Charizard') && q.includes('Base') && q.includes('Set'));
-    assert.equal(u.searchParams.get('grader'), 'PSA');
-    assert.equal(u.searchParams.get('grade'), '10');
-    assert.equal(u.searchParams.get('first_edition'), 'false');
+    // Full-pool judging (Nov9, owner request): no provider-side card options -
+    // the whole q-matched page is judged by the local gates instead.
+    assert.equal(u.searchParams.get('size'), '240');
+    assert.equal(u.searchParams.get('cards'), '1');
+    assert.equal(u.searchParams.get('exclude'), 'none');
+    assert.equal(u.searchParams.get('grader'), null);
+    assert.equal(u.searchParams.get('grade'), null);
+    assert.equal(u.searchParams.get('first_edition'), null);
+    assert.equal(u.searchParams.get('lang'), null);
+  } finally {
+    globalThis.fetch = realFetch;
+    delete process.env.SALES_PROVIDER;
+    delete process.env.COMPS_API_KEY;
+  }
+});
+
+test('fetchSales CompsAPI: unfiltered pool is judged by the local identity gates (Nov9)', async () => {
+  // With no provider-side options the page now holds every q-match; items the
+  // old options used to drop must be rejected by the LOCAL gates instead.
+  process.env.SALES_PROVIDER = 'compsapi';
+  process.env.COMPS_API_KEY = 'test-key';
+  const realFetch = globalThis.fetch;
+  const mk = (price, title, card) => ({ price, title, last_sold: '2026-11-02T00:00:00Z', card });
+  globalThis.fetch = async () => ({ ok: true, status: 200, json: async () => ({ items: [
+    mk(900, '1999 Pokemon Charizard Base Set 4/102 Unlimited Holo PSA 9',
+      { graded: true, grader: 'PSA', grade: '9', grade_label: null, card_number: '4/102', year: 1999, language: 'en', first_edition: false, flags: [] }),   // wrong grade: local grade gate
+    mk(950, '1999 Pokemon Charizard Base Set 4/102 Unlimited Holo BGS 10',
+      { graded: true, grader: 'BGS', grade: '10', grade_label: null, card_number: '4/102', year: 1999, language: 'en', first_edition: false, flags: [] }),  // wrong grader: local grader gate
+    mk(4000, '1999 Pokemon Charizard Base Set 4/102 1st Edition Holo PSA 10',
+      { graded: true, grader: 'PSA', grade: '10', grade_label: null, card_number: '4/102', year: 1999, language: 'en', first_edition: true, flags: [] }),   // 1st edition: local variant gate
+    mk(120, '1999 Pokemon Charizard Base Set 4/102 Unlimited Holo',
+      { graded: false, grader: null, grade: null, grade_label: null, card_number: '4/102', year: 1999, language: 'en', first_edition: false, flags: [] }),  // raw card: local grader gate
+    mk(600, '1999 Pokemon Charizard Base Set 4/102 Unlimited Holo PSA 10',
+      { graded: true, grader: 'PSA', grade: '10', grade_label: null, card_number: '4/102', year: 1999, language: 'en', first_edition: false, flags: [] }),  // the one valid sale
+  ] }) });
+  try {
+    const sales = await fetchSales('Charizard Base Set 4/102', 'PSA', 10, 'English', 'unlimited+holo', BASE1, null);
+    assert.deepEqual(sales.map(x => x.price), [600]);
   } finally {
     globalThis.fetch = realFetch;
     delete process.env.SALES_PROVIDER;
