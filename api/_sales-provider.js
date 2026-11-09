@@ -21,11 +21,12 @@
 // verified live): the provider's own 'sealed' flag is title-parsed and misses
 // unusual titles - a "$2,009 Pokémon Base Set 1996 Japanese Booster Pack
 // PSA 10" came through unflagged, and an English pack worded the same way
-// would pass every identity gate. A card title containing these words is
-// never the single graded card; false rejection only yields honest no-data,
-// while false acceptance poisons the cell. 'pack' alone is NOT junk
-// ('pack fresh' describes card condition), only product phrases are.
-const JUNK_KEYWORDS = /\b(lot|bundle|set of|proxy|custom|reprint|replica|orica|empty slab|slab only|fake|sealed|booster pack|booster box|booster bundle|blister|theme deck|trainer box|etb)\b/i;
+// would pass every identity gate. Scope (post-ship safety review): 'sealed'
+// rejects only with a PRODUCT noun after it (or 'factory sealed') - a bare
+// 'sealed' stays OUT because sellers write 'sealed slab'/'sealed sleeve' for
+// a single graded card. 'pack' alone is NOT junk either ('pack fresh'
+// describes card condition); only product phrases are.
+const JUNK_KEYWORDS = /\b(lot|bundle|set of|proxy|custom|reprint|replica|orica|empty slab|slab only|fake|factory[\s-]sealed|sealed\s+(pack|packs|box|boxes|booster|boosters|blister|blisters|tin|tins|deck|decks|case|cases|display|displays|product|bundle|bundles|etb)|booster pack|booster box|booster bundle|blister|theme deck|trainer box|etb)\b/i;
 const LANG_PATTERNS = {
   Japanese: /\b(japanese|japan|jpn|jp)\b/i,
   Korean: /\b(korean|korea|kor)\b/i,
@@ -312,18 +313,14 @@ export function titleMatchesPrinting(title, printing, language, cardFields) {
   const structuredNumber = cardFields && cardFields.card_number ? String(cardFields.card_number).trim() : '';
   const hasStructuredSlash = re ? re.test(structuredNumber) : false;
   if (!hasSlash && !hasStructuredSlash) return false;
-  // Year consistency (only when the title states a year)
+  // Year consistency (only when the title states a year). This is the
+  // single year gate: the provider's structured card.year is 'Year in the
+  // title' (docs), the SAME evidence, so it is not trusted as a second
+  // rejection source - its parse can reflect copyright/region years rather
+  // than a reprint (post-ship safety review Nov9).
   if (printing.year) {
     const ym = t.match(RE_TITLE_YEAR);
     if (ym && Number(ym[0]) !== printing.year) return false;
-    // The provider's structured year is the same evidence parsed by the
-    // provider (docs: 'Year in the title'); a stated year that disagrees
-    // with the printing's release year rejects (2021 reprint in a 1999
-    // cell), a null year stays neutral like a yearless title.
-    if (cardFields && cardFields.year != null) {
-      const sy = Number(cardFields.year);
-      if (Number.isInteger(sy) && sy !== printing.year) return false;
-    }
   }
   // Reprint-collection contradiction, unless the card's own set IS that collection
   if (RE_REPRINT_COLLECTION.test(t)) {
@@ -713,4 +710,4 @@ async function fetchCompsApiSales(cardQuery, grader, grade, language, variantKey
   // through the sales count; printings are never mixed to reach three.
   listings.sort((a, b) => new Date(b.date) - new Date(a.date));
   return listings.slice(0, 3);
-}
+                             }
