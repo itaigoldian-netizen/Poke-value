@@ -161,3 +161,36 @@ test('fetchSales graded branch: structured grade_label reaches the accept decisi
     delete process.env.COMPS_API_KEY;
   }
 });
+
+// Recall repair (Nov9): the provider search is a literal AND over title
+// words, so q keeps only name + set tokens; the slash number and finish
+// words are verified by the more precise local gates instead. Asserts the
+// outgoing query shape and that a zero-padded-number, "holographic"-worded
+// sale passes the unchanged local identity gates end to end.
+test('fetchSales CompsAPI query: slash number and finish words stay out of q (recall repair Nov9)', async () => {
+  process.env.SALES_PROVIDER = 'compsapi';
+  process.env.COMPS_API_KEY = 'test-key';
+  const realFetch = globalThis.fetch;
+  let seenUrl = null;
+  globalThis.fetch = async (url) => { seenUrl = url; return { ok: true, status: 200, json: async () => ({ items: [
+    { price: 100, title: 'Pokemon Charizard Base Set 004/102 Unlimited Holographic PSA 10', last_sold: '2026-10-01T00:00:00Z',
+      card: { graded: true, grader: 'PSA', grade: '10', grade_label: null, card_number: '004/102', year: 1999, language: 'en', first_edition: false, flags: [] } },
+  ] }) } };
+  try {
+    const sales = await fetchSales('Charizard Base Set 4/102', 'PSA', 10, 'English', 'unlimited+holo', BASE1, null);
+    assert.equal(sales.length, 1); // local gates accept zero-padded number + "holographic"
+    const u = new URL(seenUrl);
+    const q = u.searchParams.get('q') || '';
+    assert.equal(q.includes('4/102'), false);   // number left to the local zero-pad-tolerant gate
+    assert.equal(q.includes('holo'), false);    // finish left to the local finish regex
+    assert.ok(q.includes('Charizard') && q.includes('Base') && q.includes('Set'));
+    assert.equal(u.searchParams.get('grader'), 'PSA');
+    assert.equal(u.searchParams.get('grade'), '10');
+    assert.equal(u.searchParams.get('first_edition'), 'false');
+  } finally {
+    globalThis.fetch = realFetch;
+    delete process.env.SALES_PROVIDER;
+    delete process.env.COMPS_API_KEY;
+  }
+});
+

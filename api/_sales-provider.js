@@ -540,7 +540,18 @@ async function fetchCompsApiSales(cardQuery, grader, grade, language, variantKey
   // 10-item slice happened to contain no title with positive printing
   // evidence. Grader+grade are passed as card options, not spelled into q,
   // per the docs.
-  const qTerms = variantKey ? cardQuery + ' ' + variantQueryTerms(variantKey).join(' ') : cardQuery;
+  // Recall repair (Nov9): the provider's search is a literal AND over title
+  // words (docs: "Every word has to appear in the listing title"), so q must
+  // not repeat evidence the local gates below verify more precisely. Keep
+  // only the name + set tokens in q: the slash number stays OUT (the local
+  // printing gate is zero-pad tolerant and also reads the structured
+  // card_number) and finish words stay OUT (the local finish regex also
+  // accepts "holographic"/"foil"). Every local identity gate is unchanged,
+  // so accepted sales can only grow by titles the literal word-AND missed.
+  const qBase = printing && printing.numberSlash
+    ? cardQuery.replace(printing.numberSlash, '').replace(/\s+/g, ' ').trim()
+    : cardQuery;
+  const qTerms = qBase;
   const params = new URLSearchParams({ q: qTerms, exclude: 'junk', size: '240' });
   if (isRaw) {
     params.set('graded', 'false');
@@ -582,24 +593,29 @@ async function fetchCompsApiSales(cardQuery, grader, grade, language, variantKey
   }
 
   const listings = [];
+  // Empty-cell diagnostics (Nov9): count candidates and every rejection gate
+  // so an empty result can be read as "provider had nothing" vs "our filters
+  // rejected everything" in the logs. Counts and the provider's own hint
+  // only - never URLs, keys or sale titles.
+  const rej = { price: 0, junk: 0, language: 0, rawGraded: 0, grader: 0, grade: 0, gradeLabel: 0, variant: 0, printing: 0, date: 0 };
   for (const item of body.items) {
-    if (typeof item.price !== 'number' || item.price <= 0) continue;
+    if (typeof item.price !== 'number' || item.price <= 0) { rej.price++; continue; }
     const c = item.card || {};
     const flags = Array.isArray(c.flags) ? c.flags : [];
-    if (flags.some(f => COMPS_JUNK_FLAGS.has(f))) continue;
+    if (flags.some(f => COMPS_JUNK_FLAGS.has(f))) { rej.junk++; continue; }
 
     if (language === 'English') {
-      if (c.language && c.language !== 'en') continue;
+      if (c.language && c.language !== 'en') { rej.language++; continue; }
     } else if (c.language !== COMPS_LANG[language]) {
-      continue;
+      rej.language++; continue;
     }
 
     if (isRaw) {
       // Raw = the title names no grading company with a grade.
-      if (c.graded === true) continue;
+      if (c.graded === true) { rej.rawGraded++; continue; }
     } else {
-      if (String(c.grader || '').toUpperCase() !== grader) continue;
-      if (String(c.grade || '') !== String(grade)) continue;
+      if (String(c.grader || '').toUpperCase() !== grader) { rej.grader++; continue; }
+      if (String(c.grade || '') !== String(grade)) { rej.grade++; continue; }
       // Structured grade_label (docs: "gem mint, pristine, black label, mint
       // or near mint", null when unstated) is the only evidence separating a
       // special grade from a regular 10.
@@ -608,18 +624,27 @@ async function fetchCompsApiSales(cardQuery, grader, grade, language, variantKey
     }
 
     const title = String(item.title || '');
-    if (!isRaw && !acceptsGradedSale({ grader, grade, specialLabel, gradeLabel: c.grade_label, title })) continue;
-    if (!titleMatchesVariant(title, variantKey, c)) continue;
+    if (!isRaw && !acceptsGradedSale({ grader, grade, specialLabel, gradeLabel: c.grade_label, title })) { rej.gradeLabel++; continue; }
+    if (!titleMatchesVariant(title, variantKey, c)) { rej.variant++; continue; }
     // Printing identity evidence (Nov8): required for every counted sale; the
     // provider's structured card_number is accepted as slash-number evidence.
-    if (printing && !titleMatchesPrinting(title, printing, language, c)) continue;
+    if (printing && !titleMatchesPrinting(title, printing, language, c)) { rej.printing++; continue; }
     // Owner rule: the price is computed from the latest THREE accepted sales.
     // A sale without a verifiable date cannot prove recency, so it never
     // enters the cell.
     const date = item.last_sold ? new Date(item.last_sold) : null;
-    if (!date || isNaN(date.getTime())) continue;
+    if (!date || isNaN(date.getTime())) { rej.date++; continue; }
 
     listings.push({ price: item.price, date: item.last_sold, title });
+  }
+
+  if (listings.length === 0) {
+    console.error('sales diagnostics for ' + grader + ' ' + grade + (specialLabel ? ' ' + specialLabel : '') + ' "' + cardQuery + '"'
+      + ': candidates=' + body.items.length
+      + (typeof body.count === 'number' ? ' provider_count=' + body.count : '')
+      + (typeof body.count_before_filters === 'number' ? ' before_filters=' + body.count_before_filters : '')
+      + (body.hint ? ' hint=' + JSON.stringify(String(body.hint)) : '')
+      + ' rejections=' + JSON.stringify(rej));
   }
 
   // Never trust the provider's order: sort by the sale date itself, newest
