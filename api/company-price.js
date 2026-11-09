@@ -82,6 +82,33 @@ const RAW_CACHE_KEY_PREFIX = 'c5:';
 // the c4/c5/c6 namespaces are kept; only fresh computations use the new
 // all-accepted-sales mean.
 const TEN_CACHE_KEY_PREFIX = 'c6:';
+// Nov9 review (Main): the c7/c8/c9 namespace was live briefly (Nov9
+// 18:07-18:24) before that decision. Both generations hold compatible
+// arithmetic means under identical identity/variant keying (c4/c5/c6 from
+// Nov8 16:17+ are means, variant-scoped, special-grade split; c3 medians and
+// c2 keys remain unread), so reads check BOTH generations and serve the
+// newest fresh calculation; writes always use the current prefixes above.
+const ALT_CACHE_KEY_PREFIX = { 'c4:': 'c7:', 'c5:': 'c8:', 'c6:': 'c9:' };
+function altCacheKey(key) {
+  for (const pfx of Object.keys(ALT_CACHE_KEY_PREFIX)) {
+    if (key.startsWith(pfx)) return ALT_CACHE_KEY_PREFIX[pfx] + key.slice(pfx.length);
+  }
+  return null;
+}
+// Fresh = calculated within the TTL and not in the future (5 min skew
+// tolerance; a bad future timestamp is never served as fresh).
+function cacheFresh(updatedAt, now) {
+  const age = now - new Date(updatedAt).getTime();
+  return age > -5 * 60 * 1000 && age < CACHE_TTL_MS;
+}
+function freshestCacheRow(rows, now) {
+  let best = null;
+  for (const r of rows || []) {
+    if (!cacheFresh(r.updated_at, now)) continue;
+    if (!best || new Date(r.updated_at).getTime() > new Date(best.updated_at).getTime()) best = r;
+  }
+  return best;
+}
 
 // Special-grade tokens (owner request Nov8 18:02): separate cells above a
 // regular 10, never mixed into normal-10 cells or the EAS formula. Stored as
@@ -219,14 +246,14 @@ export default async function handler(req, res) {
         let fetched = false;
         let failed = false;
         try {
-          const { data: row } = await supabase
+          const { data: cacheRows } = await supabase
             .from('price_cache')
             .select('*')
-            .eq('card_key', fKey)
+            .in('card_key', [fKey, altCacheKey(fKey)].filter(Boolean))
             .eq('language', language)
-            .eq('grade', gradeValue)
-            .single();
-          if (row && (Date.now() - new Date(row.updated_at).getTime()) < CACHE_TTL_MS) {
+            .eq('grade', gradeValue);
+          const row = freshestCacheRow(cacheRows, Date.now());
+          if (row) {
             mean = Number(row.price);
             samples = Number(row.sample_count) || 0;
           }
@@ -312,13 +339,12 @@ export default async function handler(req, res) {
     }
 
     // Column names match the user's actual price_cache table.
-    const { data: cachedData, error: cacheReadError } = await supabase
+    const { data: cacheRows, error: cacheReadError } = await supabase
       .from('price_cache')
       .select('*')
-      .eq('card_key', cacheKey)
+      .in('card_key', [cacheKey, altCacheKey(cacheKey)].filter(Boolean))
       .eq('language', language)
-      .eq('grade', gradeValue)
-      .single();
+      .eq('grade', gradeValue);
 
     // PGRST116 = ordinary empty result (a legitimate cache miss). Anything else
     // (missing table/column, bad key, misconfiguration) must stop here, before
@@ -328,7 +354,8 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: 'Server is not configured' });
     }
 
-    if (cachedData && (Date.now() - new Date(cachedData.updated_at).getTime() < CACHE_TTL_MS)) {
+    const cachedData = freshestCacheRow(cacheRows, Date.now());
+    if (cachedData) {
       return res.status(200).json({
         card_name: cachedData.card_query,
         language: cachedData.language,
