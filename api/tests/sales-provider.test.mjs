@@ -206,10 +206,13 @@ test('printing: reprint-collection abbreviations reject (CELEB CLSC. COLL.)', ()
   assert.equal(titleMatchesPrinting('1999 Pokemon Charizard Base Set 4/102 PSA 10 from my collection', BASE1, 'English'), true);
 });
 
-test('printing: structured year disagreement rejects even without a title year', () => {
-  assert.equal(titleMatchesPrinting('Pokemon Charizard Base Set 4/102 PSA 10', BASE1, 'English', { ...CGC10, year: 2021 }), false);
-  assert.equal(titleMatchesPrinting('Pokemon Charizard Base Set 4/102 PSA 10', BASE1, 'English', { ...CGC10, year: 1999 }), true);
-  assert.equal(titleMatchesPrinting('Pokemon Charizard Base Set 4/102 PSA 10', BASE1, 'English', { ...CGC10, year: null }), true); // null stays neutral
+test('printing: structured year is NOT a rejection source (post-review Nov9)', () => {
+  // The provider's card.year is 'Year in the title' (docs) - the same
+  // evidence the title-year gate already judges. A disagreeing structured
+  // year with a yearless title stays neutral, so a copyright/region-year
+  // parse never rejects a genuine sale of another set.
+  assert.equal(titleMatchesPrinting('Pokemon Charizard Base Set 4/102 PSA 10', BASE1, 'English', { ...CGC10, year: 2021 }), true);
+  assert.equal(titleMatchesPrinting('2021 Pokemon Charizard Base Set 4/102 PSA 10', BASE1, 'English', CGC10), false); // title year still rejects
 });
 
 test('fetchSales CompsAPI: sealed-product title is junk even when the provider missed the flag', async () => {
@@ -228,6 +231,28 @@ test('fetchSales CompsAPI: sealed-product title is junk even when the provider m
     const sales = await fetchSales('Charizard Base Set 4/102', 'PSA', 10, 'English', 'unlimited+holo', BASE1, null);
     assert.equal(sales.length, 1);
     assert.equal(sales[0].price, 500);
+  } finally {
+    globalThis.fetch = realFetch;
+    delete process.env.SALES_PROVIDER;
+    delete process.env.COMPS_API_KEY;
+  }
+});
+
+test('fetchSales CompsAPI: sealed-slab single card stays; factory-sealed product is junk (post-review Nov9)', async () => {
+  process.env.SALES_PROVIDER = 'compsapi';
+  process.env.COMPS_API_KEY = 'test-key';
+  const realFetch = globalThis.fetch;
+  const mk = (price, title) => ({ price, title, last_sold: '2026-11-02T00:00:00Z',
+    card: { graded: true, grader: 'PSA', grade: '10', grade_label: null, card_number: '4/102', year: 1999, language: 'en', first_edition: false, flags: [] } });
+  globalThis.fetch = async () => ({ ok: true, status: 200, json: async () => ({ items: [
+    mk(600, '1999 Pokemon Charizard Base Set 4/102 Unlimited Holo PSA 10 sealed slab'),       // single graded card: stays
+    mk(700, '1999 Pokemon Charizard Base Set 4/102 Unlimited Holo PSA 10 pack fresh'),        // condition wording: stays
+    mk(2009.62, 'Pokemon Charizard Base Set 4/102 Unlimited factory sealed booster box PSA 10'), // product: junk
+    mk(1500, 'Pokemon Charizard Base Set 4/102 Unlimited sealed pack PSA 10'),                // product: junk
+  ] }) });
+  try {
+    const sales = await fetchSales('Charizard Base Set 4/102', 'PSA', 10, 'English', 'unlimited+holo', BASE1, null);
+    assert.deepEqual(sales.map(x => x.price).sort((a, b) => a - b), [600, 700]);
   } finally {
     globalThis.fetch = realFetch;
     delete process.env.SALES_PROVIDER;
