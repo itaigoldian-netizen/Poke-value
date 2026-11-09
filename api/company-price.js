@@ -26,6 +26,34 @@ import { easFormulaEstimate } from './_eas-formula.js';
 // damaged and clean raw copies cannot yet be separated; the frontend shows
 // the raw value without a condition claim.
 
+// Retained empty-cell evidence (Nov9, Main-directed): when a provider call
+// accepts nothing, persist the bounded diag snapshot (rejection counters +
+// up to 12 rejected candidates with titles/urls/parsed card fields) so the
+// evidence survives without a quota-costing refetch. Internal-only table
+// (RLS on, no anon policies); failures never break the endpoint.
+async function persistSalesDiag(supabase, meta, diag) {
+  try {
+    if (!diag || typeof diag.provider_count !== 'number') return;
+    const { error } = await supabase.from('sales_diagnostics').insert({
+      card_key: meta.cardKey || null,
+      card_query: meta.cardQuery || null,
+      language: meta.language || null,
+      grader: meta.grader || null,
+      grade: typeof meta.grade === 'number' ? meta.grade : null,
+      variant: meta.variant || null,
+      special_label: meta.specialLabel || null,
+      provider_count: diag.provider_count,
+      before_filters: diag.before_filters,
+      hint: diag.hint,
+      rejections: diag.rejections || null,
+      candidates: diag.candidates || [],
+    });
+    if (error) console.error('sales diagnostics snapshot failed: ' + errMsg(error));
+  } catch (e) {
+    console.error('sales diagnostics snapshot failed: ' + errMsg(e));
+  }
+}
+
 const GRADERS = ['PSA', 'BGS', 'CGC', 'SGC', 'TAG']; // no EAS: local deal reports only
 const LANGUAGES = ['English', 'Japanese', 'Chinese', 'Korean'];
 
@@ -202,7 +230,11 @@ export default async function handler(req, res) {
         if (mean === null) {
           fetched = true;
           try {
-            const fSales = await fetchSales(queryKey, fg, gradeValue, language, variantKey, variantInfo.printing, null);
+            const fDiag = {};
+            const fSales = await fetchSales(queryKey, fg, gradeValue, language, variantKey, variantInfo.printing, null, fDiag);
+            if (fSales.length === 0) {
+              await persistSalesDiag(supabase, { cardKey: fKey, cardQuery: queryKey, language, grader: fg, grade: gradeValue, variant: variantKey, specialLabel: null }, fDiag);
+            }
             if (fSales.length > 0) {
               mean = Math.round((fSales.reduce((sum, x) => sum + x.price, 0) / fSales.length) * 100) / 100;
               samples = fSales.length;
@@ -309,8 +341,9 @@ export default async function handler(req, res) {
     }
 
     let sales;
+    const salesDiag = {};
     try {
-      sales = await fetchSales(queryKey, graderKey, specialLabel ? 10 : gradeValue, language, variantKey, variantInfo.printing, specialLabel);
+      sales = await fetchSales(queryKey, graderKey, specialLabel ? 10 : gradeValue, language, variantKey, variantInfo.printing, specialLabel, salesDiag);
     } catch (err) {
       // Message only: never log request URLs, they contain the API key.
       console.error('sales fetch failed for ' + graderKey + ' ' + gradeValue + ': ' + errMsg(err));
@@ -318,6 +351,7 @@ export default async function handler(req, res) {
     }
 
     if (sales.length === 0) {
+      await persistSalesDiag(supabase, { cardKey: cacheKey, cardQuery: queryKey, language, grader: graderKey, grade: specialLabel ? 10 : gradeValue, variant: variantKey, specialLabel }, salesDiag);
       return res.status(404).json({ error: 'No data found' });
     }
 
