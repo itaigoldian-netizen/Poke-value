@@ -22,11 +22,11 @@ const LANGUAGES = ['English', 'Japanese', 'Chinese', 'Korean'];
 // graders (Nov8 owner-approved valuation change); c3 medians are provenance
 // only, never served. c5 (Nov8 17:51: no medians anywhere) re-keys RAW rows;
 // a c4 RAW row is a stale median and is never served.
-const CACHE_KEY_PREFIX = 'c7:';
-const RAW_CACHE_KEY_PREFIX = 'c8:';
+const CACHE_KEY_PREFIX = 'c4:';
+const RAW_CACHE_KEY_PREFIX = 'c5:';
 // c6 (Nov8 18:02, owner: special grades): foreign grade-10 rows. c4 normal-10
 // rows may mix positively labeled special grades and are never served.
-const TEN_CACHE_KEY_PREFIX = 'c9:'; // c4/c5/c6 held latest-three means (Nov9 re-key: all accepted sales)
+const TEN_CACHE_KEY_PREFIX = 'c6:'; // Nov9 owner decision: latest-three cached rows stay valid within the 14-day TTL
 // Synthetic grade codes for special cells (see api/company-price.js).
 const SPECIAL_CODE_LABEL = { 101: 'pristine', 102: 'black label' };
 const CACHE_TTL_MS = 14 * 24 * 60 * 60 * 1000;
